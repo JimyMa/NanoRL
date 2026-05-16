@@ -1,0 +1,64 @@
+model:
+  hf_path: /models/model--Qwen-Qwen3-4B-Instruct-2507
+  tokenizer_path: /models/model--Qwen-Qwen3-4B-Instruct-2507
+  is_moe: false
+train:
+  tp: 1
+  fsdp: true
+  fsdp_sharding_strategy: optim_grads_params
+  world_size: 2
+  pp: 1
+  ep: 1
+  micro_batch_size: 1
+  global_batch_size: 8
+  optimizer:
+    name: adam
+    lr: 1.0e-6
+infer:
+  attention_tp: 4
+  attention_dp: 1
+  attention_sp: 1
+  ffn_tp: 4
+  ffn_ep: 1
+  ffn_dp: 1
+  max_model_len: 4096
+  max_num_seqs: 16
+  max_num_batched_tokens: 512
+  gpu_memory_utilization: 0.12
+  mode: hybrid
+  kvcache_block_size: 128
+  loop_count: 32
+  executor_backend: dlslime
+  enforce_eager: false
+  trust_remote_code: false
+  use_mega_moe: false
+  num_speculative_tokens: 0
+  ray_address: 10.102.97.179:7078
+  master_address: 10.102.97.183:6006
+  nanoctrl_address: 10.102.97.179:3000
+sampling:
+  temperature: 0.7
+  top_p: 1.0
+  max_new_tokens: 256
+  n: 4
+rl:
+  algo: grpo
+  group_size: 4
+  clamp_eps_lower: 0.2
+  clamp_eps_upper: 0.2
+  kl_beta: 0.0   # M3e: ref-model wiring is in place but kernel-mode
+                 # parity isn't yet (gradient-mode SDPA picks non-
+                 # deterministic kernels, KL blows up). Set >0 once
+                 # we pin a deterministic attention backend.
+  entropy_weight: 0.0
+ray:
+  train_bundles: 1
+  infer_bundles: 1
+dlslime:
+  nanoctrl_url: http://10.102.97.179:3000
+  rollout_alias_prefix: rollout
+  train_alias_prefix: train
+  ib_port: 1
+  qp_num: 1
+weight_sync_every: 1
+num_steps: 10

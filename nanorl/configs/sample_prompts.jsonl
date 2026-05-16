@@ -1,0 +1,4 @@
+{"prompt": "What is 1 + 1? Answer in \\boxed{...}.", "reference": "2", "group_id": 0}
+{"prompt": "What is 7 * 8? Answer in \\boxed{...}.", "reference": "56", "group_id": 1}
+{"prompt": "What is 144 / 12? Answer in \\boxed{...}.", "reference": "12", "group_id": 2}
+{"prompt": "What is the square root of 81? Answer in \\boxed{...}.", "reference": "9", "group_id": 3}

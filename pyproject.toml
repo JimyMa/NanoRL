@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanorl"
+version = "0.0.1"
+description = "Ray-orchestrated GRPO with megatron-core training and NanoInfra rollouts."
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.4",
+    "ray>=2.20",
+    "pydantic>=2.5",
+    "PyYAML>=6.0",
+    "numpy",
+    "transformers>=4.45",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-asyncio"]
+
+[project.scripts]
+nanorl = "nanorl.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nanorl*"]
