@@ -1,6 +1,6 @@
 # NanoRL
 
-Ray-orchestrated reinforcement learning for large language models. **GRPO** with [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/) training (DDP single-rank or FSDP/ZeRO-3 multi-rank), [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) rollouts, and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) moving both trajectories and weight tensors over RDMA.
+Ray-orchestrated reinforcement learning for large language models. **GRPO** with [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) training (DDP single-rank or FSDP/ZeRO-3 multi-rank), [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) rollouts, and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) moving both trajectories and weight tensors over RDMA.
 
 ## Status
 
