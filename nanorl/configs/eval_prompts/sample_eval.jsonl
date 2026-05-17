@@ -1,0 +1,8 @@
+{"prompt": "What is 12 * 13? Answer with only the final number in \\boxed{...}.", "reference": "156", "group_id": 0}
+{"prompt": "What is 47 + 89? Answer with only the final number in \\boxed{...}.", "reference": "136", "group_id": 1}
+{"prompt": "What is 100 - 37? Answer with only the final number in \\boxed{...}.", "reference": "63", "group_id": 2}
+{"prompt": "What is 256 / 16? Answer with only the final number in \\boxed{...}.", "reference": "16", "group_id": 3}
+{"prompt": "What is the square root of 196? Answer with only the final number in \\boxed{...}.", "reference": "14", "group_id": 4}
+{"prompt": "If a rectangle has length 8 and width 5, what is its area? Answer with only the final number in \\boxed{...}.", "reference": "40", "group_id": 5}
+{"prompt": "What is 2 to the 10th power? Answer with only the final number in \\boxed{...}.", "reference": "1024", "group_id": 6}
+{"prompt": "If 3x = 21, what is x? Answer with only the final number in \\boxed{...}.", "reference": "7", "group_id": 7}

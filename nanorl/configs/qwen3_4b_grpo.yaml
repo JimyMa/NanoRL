@@ -20,7 +20,7 @@ infer:
   ffn_dp: 1
   max_model_len: 4096
   max_num_seqs: 16
-  max_num_batched_tokens: 512
+  max_num_batched_tokens: 4096
   gpu_memory_utilization: 0.12
   mode: hybrid
   kvcache_block_size: 128
@@ -36,7 +36,7 @@ infer:
 sampling:
   temperature: 0.7
   top_p: 1.0
-  max_new_tokens: 256
+  max_new_tokens: 2048
   n: 4
 rl:
   algo: grpo

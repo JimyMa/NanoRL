@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# End-to-end M2 smoke test: rollout-only producer + fake_train_consumer.
+# End-to-end M2 smoke test: rollout-only producer + Ray-managed consumer.
 #
 # Spins up a producer (NanoInfra Qwen3-4B), waits for the first round to
-# finish, runs the consumer, and shuts down the producer. Verifies the
+# finish, runs the consumer as a Ray actor, and shuts down the producer. Verifies the
 # full DLSlimeRPC trajectory dataloader path: NanoInfra → publish →
 # SlimeRPC → consumer → padded TrajectoryBatch.
 #
@@ -19,6 +19,7 @@ PROMPTS="${PROMPTS:-nanorl/configs/sample_prompts.jsonl}"
 ROUNDS="${ROUNDS:-3}"
 BATCHES="${BATCHES:-3}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
+CONSUMER_IP="${CONSUMER_IP:-10.102.98.154}"
 
 SUFFIX="$(date +%s)"
 PROD_ALIAS="rollout:${SUFFIX}"
@@ -28,6 +29,7 @@ mkdir -p "$LOG_DIR"
 rm -f "$LOG_DIR"/producer.log "$LOG_DIR"/consumer.log
 
 echo "[smoke] cfg=$CFG"
+echo "[smoke] consumer_ip=$CONSUMER_IP"
 echo "[smoke] aliases producer=$PROD_ALIAS consumer=$CONS_ALIAS"
 echo "[smoke] starting producer..."
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
@@ -57,13 +59,15 @@ for i in $(seq 1 180); do
 done
 sleep 3  # let serve_settle_s elapse on the producer
 
-echo "[smoke] starting consumer..."
-python scripts/fake_train_consumer.py \
+echo "[smoke] starting Ray-managed consumer..."
+NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
+python -m nanorl.cli consume-ray \
   --cfg "$CFG" \
   --producer-alias "$PROD_ALIAS" \
   --consumer-alias "$CONS_ALIAS" \
   --batches "$BATCHES" \
   --batch-size "$BATCH_SIZE" \
+  --consumer-ip "$CONSUMER_IP" \
   > "$LOG_DIR/consumer.log" 2>&1
 CONS_RC=$?
 

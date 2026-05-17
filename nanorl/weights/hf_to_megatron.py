@@ -67,9 +67,20 @@ def build_transformer_config(hf_path: str, *, bf16: bool = True):
         gated_linear_unit=True,
         activation_func=torch.nn.functional.silu,
         add_bias_linear=False,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
         bf16=bool(bf16),
         params_dtype=torch.bfloat16 if bf16 else torch.float32,
-        attention_softmax_in_fp32=True,
+        attention_softmax_in_fp32=False,
+        # Full activation checkpointing — at seq=8K with FSDP-8 the FC1
+        # output [seq, 1, 2*FFN] saved-for-backward dominates memory
+        # (~11 GB across 36 layers). Uniform recompute with one layer per
+        # block re-runs each layer's forward during its backward, dropping
+        # peak activations from ~26 GB to ~3 GB at the cost of ~30%
+        # extra compute. Required for seq>4K on Qwen3-4B + FSDP-8.
+        recompute_granularity="full",
+        recompute_method="uniform",
+        recompute_num_layers=1,
         # piped through to GPTModel separately:
         #   - position_embedding_type="rope"
         #   - rotary_base=rope_base
@@ -144,10 +155,11 @@ def hf_to_megatron_state_dict(
         h = f"model.layers.{i}"
         m = f"decoder.layers.{i}"
 
-        # Pre-attention RMSNorm. In current megatron-core this is a
-        # standalone child module (`.weight`) rather than the older fused
-        # `linear_qkv.layer_norm_weight` from slime/qwen2.py.
-        out[f"{m}.input_layernorm.weight"] = hf_state[f"{h}.input_layernorm.weight"]
+        # Pre-attention RMSNorm. The Transformer Engine spec fuses this into the QKV linear
+        # as `linear_qkv.layer_norm_weight` (TELayerNormColumnParallelLinear).
+        out[f"{m}.self_attention.linear_qkv.layer_norm_weight"] = hf_state[
+            f"{h}.input_layernorm.weight"
+        ]
 
         # fused qkv weight: [groups × (q_per_group + 2) × head_dim, hidden]
         out[f"{m}.self_attention.linear_qkv.weight"] = _fuse_qkv(
@@ -173,9 +185,9 @@ def hf_to_megatron_state_dict(
             f"{h}.self_attn.o_proj.weight"
         ]
 
-        # Pre-mlp RMSNorm — HF calls this `post_attention_layernorm`,
-        # megatron-core calls it `pre_mlp_layernorm` in this version.
-        out[f"{m}.pre_mlp_layernorm.weight"] = hf_state[
+        # Pre-mlp RMSNorm. The Transformer Engine spec fuses this into the FC1 linear as
+        # `linear_fc1.layer_norm_weight` (TELayerNormColumnParallelLinear).
+        out[f"{m}.mlp.linear_fc1.layer_norm_weight"] = hf_state[
             f"{h}.post_attention_layernorm.weight"
         ]
 
@@ -252,7 +264,7 @@ def load_qwen3_hf_into_megatron(model, hf_path: str) -> None:
 
     missing, unexpected = model.load_state_dict(remapped, strict=False)
     # We tolerate a small set of expected gaps:
-    #   - extra_state buffers (Megatron's TE-compat metadata)
+    #   - extra_state buffers (Megatron's Transformer Engine-compat metadata)
     #   - the tied lm-head when share_embeddings_and_output_weights=True
     soft_missing = [
         k

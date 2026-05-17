@@ -2,8 +2,8 @@
 
 NanoRL has two flows on the DLSlime fabric:
 
-1. **Trajectories** — small pickled batches over SlimeRPC (rollout → train).
-2. **Weights** — large tensors via raw `endpoint.read` (train → each NanoInfra worker, in parallel).
+1. **Trajectories** — small pickled batches over SlimeRPC (rollout → train), optionally carrying rollout-time response logprobs.
+2. **Weights** — large tensors via raw `endpoint.read` (train → each NanoDeploy worker, in parallel).
 
 ## SlimeRPC trajectory contract
 
@@ -23,7 +23,7 @@ class TrajectoryService:
     @method
     def apply_weight_update(self, manifest_blob: bytes) -> bytes:
         """M3: forward the manifest to LLMComponent.pull_and_apply_weights;
-        each NanoInfra worker pulls direct via its own PeerAgent."""
+        each NanoDeploy worker pulls direct via its own PeerAgent."""
 ```
 
 `Trajectory` (`nanorl/data/sample.py`):
@@ -35,9 +35,10 @@ reward:       float
 group_id:     int
 eos:          bool
 meta:         dict
+response_logprobs: list[float] | None
 ```
 
-The train side reconstructs a padded `TrajectoryBatch` via `TrajectoryBatch.from_trajectories(...)`.
+`response_logprobs` has one value per sampled response token. When all trajectories in a batch carry it, the train side reconstructs a padded `TrajectoryBatch.response_logprobs` array with shape `[B, T-1]`, aligned with `compute_per_token_logprobs(logits, tokens)`. The trainer then uses it as `old_logprobs` for the off-policy GRPO importance ratio. If any trajectory lacks logprobs, the whole batch falls back to train-side `current_logprobs.detach()`.
 
 ### Backpressure
 
@@ -49,10 +50,10 @@ Each side constructs `dlslime.PeerAgent(nanoctrl_url=..., alias=...)`, then both
 
 ## Raw RDMA weight transport (M3)
 
-Train side registers each gathered HF tensor as a versioned RDMA memory region. The manifest (small metadata-only blob) is shipped over SlimeRPC. Each NanoInfra worker then issues an RDMA read against the train's MRs **directly** — bypassing the rollout driver entirely.
+Train side registers each gathered HF tensor as a versioned RDMA memory region. The manifest (small metadata-only blob) is shipped over SlimeRPC. Each NanoDeploy worker then issues an RDMA read against the train's MRs **directly** — bypassing the rollout driver entirely.
 
 ```
-train rank 0           rollout driver         NanoInfra worker[0..3]
+train rank 0           rollout driver         NanoDeploy worker[0..3]
    │                        │                       │
    │ register MRs           │                       │
    │ (8GB on CPU)           │                       │

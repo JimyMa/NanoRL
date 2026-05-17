@@ -1,17 +1,17 @@
 # NanoRL
 
-Ray-orchestrated reinforcement learning for large language models. **GRPO** with [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) training (DDP single-rank or FSDP/ZeRO-3 multi-rank), [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) rollouts, and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) moving both trajectories and weight tensors over RDMA.
+Ray-orchestrated reinforcement learning for large language models. **Off-policy GRPO** with [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) training (DDP single-rank or FSDP/ZeRO-3 multi-rank), [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) rollouts, and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) moving trajectories, rollout-time logprobs, and weight tensors over RDMA.
 
 ## Status
 
-| Milestone                              | What it proves                                                                           | State                              |
-| -------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------- |
-| **M1** — TrainActor + dataloader       | single-rank megatron-core pulls trajectories over SlimeRPC, runs GRPO step               | ✅ `bash scripts/m1_smoke.sh`      |
-| **M2** — RolloutActor + dataloader     | NanoInfra serves rollouts, math verifier scores, samples shipped over RDMA               | ✅ `bash scripts/m2_smoke.sh`      |
-| **M3** — Train↔rollout weight sync     | DDP train side gathers, ships 8 GB Qwen3-4B → 4 NanoInfra workers via parallel RDMA pull | ✅ `bash scripts/m3_smoke.sh`      |
-| **M3+FSDP** — multi-rank ZeRO-3 + sync | 2-GPU FSDP train, uneven-DTensor gather, then weight sync                                | ✅ `bash scripts/m3_fsdp_smoke.sh` |
+| Milestone                              | What it proves                                                                                            | State                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| **M1** — TrainActor + dataloader       | Ray-managed megatron-core TrainActor pulls trajectories over SlimeRPC and runs GRPO                       | ✅ `bash scripts/m1_smoke.sh`      |
+| **M2** — RolloutActor + dataloader     | NanoDeploy serves rollouts, math verifier scores, samples + optional logprobs ship over RDMA              | ✅ `bash scripts/m2_smoke.sh`      |
+| **M3** — Train↔rollout weight sync     | DDP train side gathers, ships 8 GB Qwen3-4B → NanoDeploy workers via parallel RDMA pull                   | ✅ `bash scripts/m3_smoke.sh`      |
+| **M3+FSDP** — multi-rank ZeRO-3 + sync | Ray-managed multi-rank FSDP train on a selected node, uneven-DTensor gather, weight sync, checkpoint save | ✅ `bash scripts/m3_fsdp_smoke.sh` |
 
-The full GRPO loop runs end-to-end on Qwen3-4B-Instruct.
+The full off-policy GRPO loop runs end-to-end on Qwen3-4B. Rollout-side logprobs can be used as `old_logprobs` for the importance ratio, so ratios and clipping reflect real policy drift between weight syncs.
 
 ## Quick start
 
@@ -20,7 +20,7 @@ Pre-reqs (already running on this cluster — see `docs/install.md` if any are m
 - NanoCtrl on `http://10.102.97.179:3000` + Redis on `127.0.0.1:6379`
 - Ray cluster reachable at `10.102.97.179:7078`
 - RDMA HCAs visible under `/sys/class/infiniband`
-- Free GPUs on the configured `master_address` host (default `10.102.97.183` for rollout, local for train)
+- Free GPUs on the configured `master_address` host for rollout and on `TRAIN_IP` for train. The smoke scripts launch both sides under Ray; the shell host is only the driver.
 
 ```bash
 pip install -e .
@@ -33,21 +33,67 @@ python -m nanorl.cli rollout-only --cfg nanorl/configs/qwen3_4b_grpo.yaml \
   --prompts nanorl/configs/sample_prompts.jsonl --rounds 1 --no-rpc
 ```
 
-**Full M3 loop** (rollout on `.183`, single-rank DDP train on `.179:GPU-7`, 5 GRPO steps with 2 weight syncs):
+**Full M3 loop** (rollout on `.183`, Ray TrainActor on the configured train node, 5 GRPO steps with 2 weight syncs):
 
 ```bash
 bash scripts/m3_smoke.sh
 ```
 
-**Multi-rank FSDP** (rollout on `.183`, 2-rank ZeRO-3 train on `.179:GPU-6,7`):
+**Multi-rank FSDP** (rollout on `.183`, ZeRO-3 train packed by Ray on `TRAIN_IP`):
 
 ```bash
+TRAIN_IP=10.102.98.166 NPROC=8 bash scripts/m3_fsdp_smoke.sh
+```
+
+Useful smoke-script overrides:
+
+```bash
+PROMPTS=/tmp/train.jsonl EVAL_PROMPTS=/tmp/eval.jsonl \
+STEPS=500 EVAL_EVERY=25 SYNC_EVERY=2 \
+SAVE_DIR=/tmp/nanorl_ckpts/run SAVE_EVERY=50 SAVE_FINAL=1 \
+TRAIN_IP=10.102.98.166 NPROC=8 \
 bash scripts/m3_fsdp_smoke.sh
 ```
 
+**Dashboard** for a smoke run:
+
+```bash
+nanorl-dashboard \
+  --train-jsonl /tmp/nanorl_smoke/m3_train.jsonl \
+  --producer-log /tmp/nanorl_smoke/m3_producer.log \
+  --expect-sync \
+  --out /tmp/nanorl_smoke/dashboard.html
+```
+
+The generated HTML is static and highlights finite loss, loss trend, reward
+variance, weight-sync health, loaded tensor counts, and timing.
+
+## Rollout-side logprobs
+
+`sampling.ship_logprobs: true` asks NanoDeploy to return per-response-token logprobs for sampled tokens. NanoRL stores them on each `Trajectory` and the trainer consumes them as `old_logprobs`, so:
+
+- `old_lp=True` in train logs means the inference-side logprobs arrived.
+- `logprob_to_old=mean/max` tracks policy drift from the rollout policy to the current train policy.
+- `kl_to_old` is the off-policy distance actually used for monitoring. The older `kl`/`kl_mean` field is reference-model KL and remains a diagnostic unless `rl.kl_beta > 0`.
+
+Use `--no-ship-logprobs` on `rollout-only` to fall back to train-side `current_logprobs.detach()`, which makes ratios equal 1 by construction and is useful for parity debugging.
+
+## Checkpoints
+
+`nanorl train` and `nanorl train-ray` can save HF-format checkpoints:
+
+```bash
+python -m nanorl.cli train-ray ... \
+  --save-dir /tmp/nanorl_ckpts/my_run \
+  --save-every 50 \
+  --save-final
+```
+
+Each save writes `step_XXXXXX/model.safetensors`, tokenizer/config files copied from the source HF directory, and `nanorl_checkpoint.json`. In Ray mode the path is local to the train node where the Ray TrainActor runs.
+
 ## Operational numbers
 
-Qwen3-4B-Instruct, 1 train rank (DDP) + 4 NanoInfra workers (TP=4 attn, ffn_tp=4):
+Qwen3-4B-Instruct, 1 train rank (DDP) + 4 NanoDeploy workers (TP=4 attn, ffn_tp=4):
 
 |                                           | DDP train                  | 2-rank FSDP train               |
 | ----------------------------------------- | -------------------------- | ------------------------------- |
@@ -76,11 +122,11 @@ The four cross-process smokes (`m1`, `m2`, `m3`, `m3_fsdp`) are the integration 
 
 ```
 nanorl/
-  cli.py                    rollout-only ✅, train-only ✅, train ✅
+  cli.py                    rollout-only ✅, train-only ✅, train ✅, train-ray ✅, consume-ray ✅
   config.py                 pydantic schemas; loaded from YAML
   actors/
-    train.py                TrainActor: megatron-core (DDP or FSDP), GRPO step, weight gather
-    rollout.py              RolloutEngine: NanoInfra LLM + verifier + publisher
+    train.py                TrainActor: megatron-core (DDP or FSDP), GRPO step, weight gather, HF save
+    rollout.py              RolloutEngine: NanoDeploy LLM + verifier + publisher + rollout logprobs
   data/
     sample.py               Trajectory / TrajectoryBatch
     trajectory_buffer.py    SlimeRPC TrajectoryService (producer + apply_weight_update RPC)
@@ -96,7 +142,6 @@ nanorl/
     advantages.py           Group-relative
     reward.py               Verifier protocol + math verifier
     reference_model.py      Frozen GPTModel for KL term (kl_beta=0 default — see kl note)
-  train_loop.py             Top-level driver for `nanorl train`
   configs/
     qwen3_4b_grpo.yaml      DDP single-rank baseline
     qwen3_4b_grpo_fsdp.yaml ZeRO-3 multi-rank variant
@@ -104,12 +149,12 @@ nanorl/
 scripts/
   m1_smoke.sh, m2_smoke.sh, m3_smoke.sh, m3_fsdp_smoke.sh   end-to-end smokes
   fake_train_consumer.py    pulls from a running rollout-only over SlimeRPC
-  sanity_apply_weight_update.py  one-shot: NanoInfra patch in/out check
+  sanity_apply_weight_update.py  one-shot: NanoDeploy patch in/out check
   sanity_qwen3_forward.py   HF↔Megatron logit cross-check (Δ logprob ≈ 4e-4)
   diag_train_vs_ref.py      reproduces the kl-kernel-parity issue (kl_beta=0 cause)
   diag_fsdp_full_tensor.py  reproduces the per-rank uneven-DTensor shape mismatch
 
-NanoInfra patches (in /mnt/nvme1n1/ml_research/majinming/src/NanoInfra/NanoDeploy):
+NanoDeploy patches (in /mnt/nvme1n1/ml_research/majinming/src/NanoDeploy/NanoDeploy):
   nanodeploy/worker/weight_update.py         apply_named_tensors_in_place helper
   nanodeploy/worker/pull_weights.py          worker-direct RDMA pull (the 13× speedup)
   nanodeploy/engine/weight_sync.py           engine fan-out wrapper
@@ -118,15 +163,15 @@ NanoInfra patches (in /mnt/nvme1n1/ml_research/majinming/src/NanoInfra/NanoDeplo
 
 ## Documentation
 
-| Doc                       | Read when                                                       |
-| ------------------------- | --------------------------------------------------------------- |
-| `docs/install.md`         | Setting up a new host or debugging missing pre-reqs             |
-| `docs/architecture.md`    | How Ray, NanoInfra, megatron-core, DLSlime fit together         |
-| `docs/cli.md`             | Every CLI flag with examples                                    |
-| `docs/rollout.md`         | M2 walkthrough — config, JSONL format, smoke output             |
-| `docs/training.md`        | M1/M3 walkthrough — DDP and FSDP recipes, weight sync internals |
-| `docs/data_plane.md`      | SlimeRPC trajectory contract, raw-RDMA weight transport         |
-| `docs/troubleshooting.md` | Failures we have actually hit and how we fixed them             |
+| Doc                       | Read when                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `docs/install.md`         | Setting up a new host or debugging missing pre-reqs                                 |
+| `docs/architecture.md`    | How Ray, NanoDeploy, megatron-core, DLSlime fit together                            |
+| `docs/cli.md`             | Every CLI flag with examples                                                        |
+| `docs/rollout.md`         | M2 walkthrough — config, JSONL format, smoke output                                 |
+| `docs/training.md`        | M1/M3 walkthrough — Ray TrainActors, DDP/FSDP recipes, weight sync, checkpoint save |
+| `docs/data_plane.md`      | SlimeRPC trajectory contract, raw-RDMA weight transport                             |
+| `docs/troubleshooting.md` | Failures we have actually hit and how we fixed them                                 |
 
 ## Known limitations
 
@@ -134,4 +179,5 @@ NanoInfra patches (in /mnt/nvme1n1/ml_research/majinming/src/NanoInfra/NanoDeplo
 - **TP > 1 / PP > 1 train side not supported yet** (only TP=1 PP=1 EP=1; FSDP at world_size > 1 is the multi-rank story today).
 - **MoE Qwen3.5-35B-A3B not wired** — the gather walk and shapes assume dense Qwen3.
 - **Single math verifier** — no `--verifier` flag yet.
-- **Full GRPO group + reward variance not yet exercised** on the bundled prompts (they're trivial arithmetic, all rollouts get reward 1.0 → advantage 0 → loss 0). The pipeline is correct; harder prompts are the path to seeing actual learning.
+- **Resume is not implemented yet.** Checkpoint save writes HF-format weights for evaluation/export, but there is no optimizer/RNG restore path yet.
+- **Bundled prompts are smoke tests, not learning benchmarks.** Use a harder train/eval JSONL pair to see reward variance and real policy movement.

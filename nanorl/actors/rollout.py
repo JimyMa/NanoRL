@@ -63,6 +63,11 @@ class PendingTrajectory:
     group_id: int
     reference: str
     eos: bool
+    # Per-response-token logprobs from the rollout-time policy (length
+    # == len(response_ids)) when SamplingCfg.ship_logprobs is True; None
+    # otherwise. Forwarded to Trajectory and consumed by the trainer as
+    # ``old_logprobs`` in the GRPO importance ratio.
+    response_logprobs: list[float] | None = None
 
 
 @dataclass
@@ -210,22 +215,42 @@ class RolloutEngine:
         return self._llm
 
     def _encode(self, prompt: str) -> list[int]:
-        if getattr(self._tokenizer, "chat_template", None):
+        if self._model_cfg.apply_chat_template and getattr(
+            self._tokenizer, "chat_template", None
+        ):
             text = self._tokenizer.apply_chat_template(
                 [{"role": "user", "content": prompt}],
                 tokenize=False,
                 add_generation_prompt=True,
             )
         else:
+            # Base models: feed prompt raw. The tokenizer may carry a chat
+            # template inherited from an instruct sibling, but the base
+            # wasn't trained on the wrapping tokens — feeding them produces
+            # incoherent outputs ~half the time. Operator opts in via
+            # cfg.model.apply_chat_template=true.
             text = prompt
         return self._tokenizer.encode(text)
 
     def _sampling_params(self):
-        return self._SamplingParams(
+        # ``return_completion_logprobs`` opts the worker into the new
+        # NanoInfra logprob path (Sampler.forward_with_logprobs ->
+        # Sequence.completion_logprobs). Newer NanoInfra builds accept
+        # the kwarg; older ones don't — fall back gracefully so a stale
+        # build doesn't break the rollout.
+        kwargs = dict(
             max_tokens=self._sampling_cfg.max_new_tokens,
             temperature=self._sampling_cfg.temperature,
             ignore_eos=False,
         )
+        if getattr(self._sampling_cfg, "ship_logprobs", False):
+            kwargs["return_completion_logprobs"] = True
+        try:
+            return self._SamplingParams(**kwargs)
+        except TypeError:
+            # NanoInfra build without the new flag — drop it and proceed.
+            kwargs.pop("return_completion_logprobs", None)
+            return self._SamplingParams(**kwargs)
 
     # ------------------------------------------------------------------
 
@@ -260,6 +285,11 @@ class RolloutEngine:
             response_text = self._tokenizer.decode(
                 response_ids, skip_special_tokens=True
             )
+            # Read rollout-time per-token logprobs when the patched
+            # NanoInfra populated them. Empty (legacy build, or sampling
+            # didn't request them) → None so trainer falls back cleanly.
+            raw_lp = getattr(seq, "completion_logprobs", None)
+            response_logprobs = list(raw_lp) if raw_lp else None
             out.append(
                 PendingTrajectory(
                     prompt_ids=list(prompt_ids),
@@ -268,7 +298,21 @@ class RolloutEngine:
                     group_id=item.group_id,
                     reference=item.reference,
                     eos=bool(getattr(seq, "is_finished", True)),
+                    response_logprobs=response_logprobs,
                 )
+            )
+        if getattr(self._sampling_cfg, "ship_logprobs", False):
+            with_lp = sum(1 for p in out if p.response_logprobs is not None)
+            lp_lens = [
+                len(p.response_logprobs or [])
+                for p in out
+                if p.response_logprobs is not None
+            ]
+            logger.info(
+                "rollout logprobs: %d/%d completions carried logprobs%s",
+                with_lp,
+                len(out),
+                f" len_min={min(lp_lens)} len_max={max(lp_lens)}" if lp_lens else "",
             )
         return out
 
@@ -294,6 +338,7 @@ class RolloutEngine:
                     group_id=p.group_id,
                     eos=p.eos,
                     meta={"reference": p.reference},
+                    response_logprobs=p.response_logprobs,
                 )
             )
         return out

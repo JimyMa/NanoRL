@@ -1,30 +1,32 @@
 model:
-  hf_path: /models/model--Qwen-Qwen3-4B-Instruct-2507
-  tokenizer_path: /models/model--Qwen-Qwen3-4B-Instruct-2507
+  hf_path: /models/Qwen-Qwen3-4B-Base
+  tokenizer_path: /models/Qwen-Qwen3-4B-Base
   is_moe: false
+  apply_chat_template: false
 train:
   tp: 1
   fsdp: true
   fsdp_sharding_strategy: optim_grads_params
-  world_size: 2
+  world_size: 8
   pp: 1
   ep: 1
   micro_batch_size: 1
   global_batch_size: 8
+  seq_len: 9216
   optimizer:
     name: adam
     lr: 1.0e-6
 infer:
-  attention_tp: 4
-  attention_dp: 1
+  attention_tp: 2
+  attention_dp: 4
   attention_sp: 1
-  ffn_tp: 4
+  ffn_tp: 2
   ffn_ep: 1
-  ffn_dp: 1
-  max_model_len: 4096
+  ffn_dp: 4
+  max_model_len: 16384
   max_num_seqs: 16
-  max_num_batched_tokens: 512
-  gpu_memory_utilization: 0.12
+  max_num_batched_tokens: 8192
+  gpu_memory_utilization: 0.5
   mode: hybrid
   kvcache_block_size: 128
   loop_count: 32
@@ -37,9 +39,9 @@ infer:
   master_address: 10.102.97.183:6006
   nanoctrl_address: 10.102.97.179:3000
 sampling:
-  temperature: 0.7
+  temperature: 1.0
   top_p: 1.0
-  max_new_tokens: 256
+  max_new_tokens: 8192
   n: 4
 rl:
   algo: grpo

@@ -21,6 +21,7 @@ buffers, and return per-worker counts.
 from __future__ import annotations
 
 import logging
+import os
 import pickle
 import threading
 import time
@@ -31,6 +32,17 @@ from dlslime import PeerAgent
 from dlslime.rpc import method, proxy, serve
 
 from .sample import Trajectory
+
+
+# Per-call payload cap. The server packs trajectories greedily until the
+# next one would exceed this budget, then returns what it has — the
+# client just calls ``pull_batch`` again to keep draining. This avoids
+# the SlimeRPC slot-size limit (default 32 MB) for pathological cases
+# (huge responses + logprobs) without needing compression or wire-format
+# changes. Override via ``NANORL_RPC_MAX_PAYLOAD`` in bytes; default
+# leaves a generous safety margin under the 32 MB SlimeRPC slot.
+_DEFAULT_MAX_PAYLOAD = 24 * 1024 * 1024
+_MAX_PAYLOAD = int(os.environ.get("NANORL_RPC_MAX_PAYLOAD", str(_DEFAULT_MAX_PAYLOAD)))
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +118,23 @@ class TrajectoryService:
                 if remaining <= 0:
                     return pickle.dumps([])
                 self._not_empty.wait(timeout=remaining)
-            take = min(n, len(self._buf))
-            out = [self._buf.popleft() for _ in range(take)]
+            take_max = min(n, len(self._buf))
+            # Greedy-pack: pop trajectories until either the request is
+            # satisfied or the next one would push the pickled payload
+            # over ``_MAX_PAYLOAD``. Always include at least one to make
+            # progress (even oversized singletons go through, the
+            # SlimeRPC layer will surface a clear error if the slot is
+            # too small for that one trajectory).
+            out: list[Trajectory] = []
+            running_bytes = 0
+            for _ in range(take_max):
+                cand = self._buf[0]
+                est = len(pickle.dumps(cand, protocol=pickle.HIGHEST_PROTOCOL))
+                if out and running_bytes + est > _MAX_PAYLOAD:
+                    break
+                self._buf.popleft()
+                out.append(cand)
+                running_bytes += est
         return pickle.dumps(out)
 
     @method
@@ -195,9 +222,11 @@ def run_rpc_server(
 
     If `connection` is provided (the object returned by
     ``PeerAgent.connect_to(...)``), the serve thread waits for it to come up
-    *before* calling ``serve``. Without that, dlslime's ``serve`` raises
-    ``ValueError("requires a connected endpoint")`` on producers that come
-    up before any consumer registers — see ``dlslime/rpc/proxy.py:76``.
+    *before* calling ``serve``. If it is omitted, the thread waits for a
+    connection initiated by the consumer. This avoids sending DLSlime
+    ``qp_ready`` to a consumer alias that has not registered its stream yet.
+    In that early-send case the producer marks itself connected, but the
+    consumer never receives the producer QP and waits forever.
 
     `serve_settle_s` is a brief sleep after `serve()` returns control of the
     main path to its background workers — gives dlslime a beat to post
@@ -209,9 +238,24 @@ def run_rpc_server(
     """
 
     def _target():
-        if connection is not None:
+        conn = connection
+        if conn is None:
+            deadline = time.monotonic() + connect_timeout_s
+            while conn is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    logger.error(
+                        "trajectory rpc server: timed out waiting for "
+                        "consumer-initiated connection from %s",
+                        consumer_alias,
+                    )
+                    return
+                conn = agent.query_connection(consumer_alias)
+                if conn is None:
+                    time.sleep(min(0.2, remaining))
+        if conn is not None:
             try:
-                connection.wait(timeout=connect_timeout_s)
+                conn.wait(timeout=connect_timeout_s)
             except Exception as exc:
                 logger.error(
                     "trajectory rpc server: connection wait to %s failed: %s",

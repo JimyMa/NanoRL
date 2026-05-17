@@ -69,6 +69,12 @@ class TrajectoryClient:
                     self._cfg.pull_size, self._cfg.pull_timeout_s
                 )
                 payload: bytes = fut.wait(timeout=self._cfg.pull_timeout_s + 5.0)
+                # Server packs trajectories greedily but caps payload at
+                # ``NANORL_RPC_MAX_PAYLOAD`` bytes (default 24 MB) — if
+                # the buffer was hot the consumer may get fewer samples
+                # than ``pull_size`` requested. The outer ``next_batch``
+                # loop already pulls in chunks until ``global_batch_size``
+                # is satisfied, so we just decode and queue what we got.
                 samples: list[Trajectory] = pickle.loads(payload)
             except Exception as exc:
                 consecutive_failures += 1

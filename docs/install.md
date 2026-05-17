@@ -33,7 +33,7 @@ cd /mnt/nvme1n1/ml_research/majinming/src/NanoRL
 pip install -e .
 ```
 
-This installs `nanorl` and pulls in `torch`, `ray`, `pydantic`, `PyYAML`, `numpy`, `transformers`. It does **not** install `nanodeploy` (NanoInfra) or `dlslime` — those are already on `sys.path` on this cluster.
+This installs `nanorl` and pulls in `torch`, `ray`, `pydantic`, `PyYAML`, `numpy`, `transformers`. It does **not** install `nanodeploy` (NanoDeploy) or `dlslime` — those are already on `sys.path` on this cluster.
 
 ## 2. NanoCtrl + Redis (DLSlime control plane)
 
@@ -45,7 +45,7 @@ Both must be reachable from any host running a NanoRL component.
 | Redis                   | `127.0.0.1:6379`                                                                  | Already running; `redis-cli -p 6379 PING` returns `PONG`                    |
 | NanoCtrl HTTP           | `http://10.102.97.179:3000` (LAN IP, **not** `127.0.0.1`)                         | Health check: `curl http://10.102.97.179:3000/` → `NanoCtrl Server Running` |
 
-**Why LAN IP, not localhost:** any NanoInfra worker on a remote node must reach NanoCtrl over the network. Mixing `127.0.0.1` and `10.102.97.179` in different configs causes mailbox-MR lookups to silently fail. See `docs/troubleshooting.md`.
+**Why LAN IP, not localhost:** any NanoDeploy worker on a remote node must reach NanoCtrl over the network. Mixing `127.0.0.1` and `10.102.97.179` in different configs causes mailbox-MR lookups to silently fail. See `docs/troubleshooting.md`.
 
 To bring up NanoCtrl yourself:
 
@@ -58,7 +58,7 @@ There is **no** `/health` endpoint despite what `nanoctrl status` claims; probe 
 
 ## 3. Ray cluster
 
-NanoInfra calls `ray.init(address=...)`. NanoRL itself does not require Ray.
+NanoDeploy calls `ray.init(address=...)`. NanoRL itself does not require Ray.
 
 | Field          | Value                          |
 | -------------- | ------------------------------ |
@@ -91,7 +91,7 @@ Default config (`nanorl/configs/qwen3_4b_grpo.yaml`) points at:
 | `/models/models-Qwen-Qwen3.5-35B-A3B/`        | M3+ MoE target (HF→Megatron MoE conversion not yet implemented) |
 | `/models/model--Qwen--Qwen3-30B-A3B-FP8/`     | Different architecture from 35B-A3B; FP8 path deferred          |
 
-Each must be a directory with `config.json`, `tokenizer.json`, and `model*.safetensors`. NanoRL pre-flights this in `RolloutEngine.__init__` so a typo'd path fails in seconds, not after a 60 s NanoInfra startup.
+Each must be a directory with `config.json`, `tokenizer.json`, and `model*.safetensors`. NanoRL pre-flights this in `RolloutEngine.__init__` so a typo'd path fails in seconds, not after a 60 s NanoDeploy startup.
 
 ## 6. GPUs
 

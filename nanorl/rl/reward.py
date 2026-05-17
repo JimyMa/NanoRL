@@ -18,13 +18,26 @@ class Verifier(Protocol):
 
 
 _BOXED = re.compile(r"\\boxed\{([^{}]*)\}")
-_TRAILING_NUM = re.compile(r"-?\d+(?:\.\d+)?(?!.*\d)")
+# Per-line "Answer: X" — the DAPO/MATH-style instruction tells the model to
+# put its final answer on its own line after this prefix. Multi-line aware.
+_ANSWER_LINE = re.compile(r"(?im)^\s*answer\s*[:\-]\s*(.+?)\s*$")
+# Trailing number fallback. ``re.DOTALL`` makes ``.`` match newlines so the
+# negative-lookahead ``(?!.*\d)`` actually anchors at document-end (without
+# DOTALL it picks the first end-of-LINE number, not the last in the whole
+# response, and we'd extract "5" from "5²" three lines before the real answer).
+_TRAILING_NUM = re.compile(r"-?\d+(?:\.\d+)?(?!.*\d)", re.DOTALL)
 
 
 def _extract_answer(text: str) -> str | None:
-    matches = _BOXED.findall(text)
-    if matches:
-        return matches[-1].strip()
+    boxed = _BOXED.findall(text)
+    if boxed:
+        return boxed[-1].strip()
+    answer_lines = _ANSWER_LINE.findall(text)
+    if answer_lines:
+        # Strip a trailing "$" / period / latex wrappers for clean compare.
+        cand = answer_lines[-1].strip().strip("$").strip(".").strip()
+        if cand:
+            return cand
     m = _TRAILING_NUM.search(text)
     return m.group(0) if m else None
 

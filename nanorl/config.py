@@ -16,6 +16,12 @@ class ModelCfg(pydantic.BaseModel):
     hf_path: str
     tokenizer_path: str | None = None
     is_moe: bool = False
+    # Wrap rollout prompts in the tokenizer's chat template before encoding.
+    # Set False for base models — the tokenizer may carry a chat template
+    # inherited from a sibling instruct model, but the base wasn't trained
+    # on the wrapping tokens (<|im_start|>, <|im_end|>) so feeding them
+    # produces incoherent outputs ~half the time.
+    apply_chat_template: bool = True
 
 
 class OptimizerCfg(pydantic.BaseModel):
@@ -83,6 +89,12 @@ class SamplingCfg(pydantic.BaseModel):
     top_p: float = 1.0
     max_new_tokens: int = 1024
     n: int = 8
+    # Ship per-token logprobs of the chosen tokens through the trajectory
+    # so the trainer can use them as ``old_logprobs`` (importance-sampling
+    # baseline). False reverts to the train-side ``current_logprobs.detach()``
+    # fallback that gives ratios=1.0 by construction. Requires the
+    # ``return_completion_logprobs`` patch on the rollout's NanoInfra build.
+    ship_logprobs: bool = True
 
 
 class RLCfg(pydantic.BaseModel):

@@ -38,7 +38,9 @@ class ReferenceModel:
 
     def __init__(self, model_cfg: ModelCfg, train_cfg: TrainCfg):
         # Lazy imports — avoid pulling Megatron into every CLI process.
-        from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
+        from megatron.core.models.gpt.gpt_layer_specs import (
+            get_gpt_layer_with_transformer_engine_spec,
+        )
         from megatron.core.models.gpt.gpt_model import GPTModel
 
         from nanorl.weights.hf_to_megatron import (
@@ -50,7 +52,7 @@ class ReferenceModel:
         logger.info("building reference GPTModel from %s", model_cfg.hf_path)
         tcfg = build_transformer_config(model_cfg.hf_path, bf16=train_cfg.bf16)
         meta = hf_metadata(model_cfg.hf_path)
-        spec = get_gpt_layer_local_spec(qk_layernorm=True, normalization="RMSNorm")
+        spec = get_gpt_layer_with_transformer_engine_spec(qk_layernorm=True)
         self.model = (
             GPTModel(
                 config=tcfg,

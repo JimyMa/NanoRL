@@ -21,6 +21,7 @@ test = ["pytest", "pytest-asyncio"]
 
 [project.scripts]
 nanorl = "nanorl.cli:main"
+nanorl-dashboard = "nanorl.metrics.dashboard:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

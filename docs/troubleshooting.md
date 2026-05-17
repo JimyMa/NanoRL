@@ -1,8 +1,8 @@
 # Troubleshooting
 
-Most NanoRL failures live at the seams between Ray, NanoInfra, NanoCtrl, and DLSlime. This page is the playbook for failures we have actually hit.
+Most NanoRL failures live at the seams between Ray, NanoDeploy, NanoCtrl, and DLSlime. This page is the playbook for failures we have actually hit.
 
-## Rollout / NanoInfra startup
+## Rollout / NanoDeploy startup
 
 ### `PermissionError: '/tmp/ray/session_*/node_ip_address.json.lock'`
 
@@ -20,9 +20,9 @@ Re-apply after every Ray cluster restart.
 
 **Cause:** model path in `cfg.model.hf_path` doesn't exist. `RolloutEngine.__init__` pre-flights this so we fail in seconds, not after a 60 s startup.
 
-### NanoInfra hangs with `Failed to connect to GCS at address ...:6379`
+### NanoDeploy hangs with `Failed to connect to GCS at address ...:6379`
 
-**Cause:** NanoInfra defaulted `ray_address` to `127.0.0.1:6379`, but `6379` is **Redis** here (Ray is on `7078`).
+**Cause:** NanoDeploy defaulted `ray_address` to `127.0.0.1:6379`, but `6379` is **Redis** here (Ray is on `7078`).
 
 **Fix:** set `infer.ray_address: 10.102.97.179:7078` and `infer.master_address: 10.102.97.183:6006` in YAML.
 
@@ -79,7 +79,7 @@ The `start` (background) subcommand needs write access to `/tmp/nanoctrl/`, whic
 
 ### Rollout side reports `apply_weight_update` worked but generation didn't change
 
-This shouldn't happen with the current `pull_and_apply_weights` path — every NanoInfra worker logs its `loaded` count. Check:
+This shouldn't happen with the current `pull_and_apply_weights` path — every NanoDeploy worker logs its `loaded` count. Check:
 
 - All 4 workers report `loaded: 218` (or whatever the per-rank-shard count is for your TP layout). If a worker reports `loaded: 0`, its PeerAgent didn't reach the train side.
 - The manifest's `train_alias` matches the train PeerAgent's actual alias (rank-0 only).
@@ -89,7 +89,30 @@ This shouldn't happen with the current `pull_and_apply_weights` path — every N
 
 ### M3 sync wall is 60 s, not 5 s
 
-You're on the slow path. The fast path requires the NanoInfra patches in `NanoDeploy/nanodeploy/worker/pull_weights.py` and the `LLMEngine.pull_and_apply_weights` method. If `LLMComponent.pull_and_apply_weights` is missing, the rollout falls back to the slow `update_weights` (Ray fan-out of full dict).
+You're on the slow path. The fast path requires the NanoDeploy patches in `NanoDeploy/nanodeploy/worker/pull_weights.py` and the `LLMEngine.pull_and_apply_weights` method. If `LLMComponent.pull_and_apply_weights` is missing, the rollout falls back to the slow `update_weights` (Ray fan-out of full dict).
+
+## Off-policy logprobs
+
+### Train logs show `old_lp=False` or ratios stay exactly `1.000`
+
+**Cause:** rollout did not deliver `Trajectory.response_logprobs`, so TrainActor fell back to `current_logprobs.detach()`.
+
+**Fixes:**
+
+1. Make sure rollout was not launched with `--no-ship-logprobs`.
+2. Check `sampling.ship_logprobs: true` in YAML.
+3. Check rollout logs for `rollout logprobs: N/N completions carried logprobs`.
+4. If it says `0/N`, rebuild NanoDeploy with the `return_completion_logprobs` / sampler logprob patch.
+
+### `logprob_to_old_mean` is around 0.5+ immediately after sync
+
+**Cause:** training forward is stochastic. We hit this when Qwen dropout was nonzero in the Megatron `TransformerConfig`: rollout/HF eval logprobs and Megatron train-mode logprobs disagreed even at identical weights.
+
+**Fix already in code:** `nanorl/weights/hf_to_megatron.py:build_transformer_config` sets both `hidden_dropout=0.0` and `attention_dropout=0.0`. With dropout off, post-sync `logprob_to_old_mean` should usually live around `0.1-0.2` for the current Qwen3-4B runs.
+
+### `kl_mean` is enormous but `kl_to_old` looks reasonable
+
+`kl_mean` is reference-model KL (`rl.kl_beta` path). `kl_to_old` is the rollout-policy distance computed from `old_logprobs` and is the useful off-policy monitor in the current setup. Keep `rl.kl_beta: 0.0` until the SDPA kernel-parity issue below is fixed.
 
 ## FSDP
 

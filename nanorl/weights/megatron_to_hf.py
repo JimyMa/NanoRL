@@ -193,9 +193,11 @@ def _gather_walk(
         i, rest = int(m.group(1)), m.group(2)
         h = f"model.layers.{i}"
 
-        if rest == "input_layernorm.weight":
+        if rest == "self_attention.linear_qkv.layer_norm_weight":
+            # Transformer Engine spec fuses input_layernorm into the QKV linear.
             out[f"{h}.input_layernorm.weight"] = full
-        elif rest == "pre_mlp_layernorm.weight":
+        elif rest == "mlp.linear_fc1.layer_norm_weight":
+            # Transformer Engine spec fuses pre_mlp_layernorm into the FC1 linear.
             out[f"{h}.post_attention_layernorm.weight"] = full
         elif rest == "self_attention.linear_qkv.weight":
             q, k, v = _split_qkv(

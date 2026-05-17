@@ -139,13 +139,13 @@ def test_state_dict_mapper_produces_expected_megatron_names(tmp_path):
     out = hf_to_megatron_state_dict(hf_state, str(fake_dir), has_output_layer=False)
 
     expected_per_layer = {
-        "input_layernorm.weight",
         "self_attention.linear_qkv.weight",
+        "self_attention.linear_qkv.layer_norm_weight",
         "self_attention.q_layernorm.weight",
         "self_attention.k_layernorm.weight",
         "self_attention.linear_proj.weight",
-        "pre_mlp_layernorm.weight",
         "mlp.linear_fc1.weight",
+        "mlp.linear_fc1.layer_norm_weight",
         "mlp.linear_fc2.weight",
     }
     assert "embedding.word_embeddings.weight" in out
