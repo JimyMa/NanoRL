@@ -1,17 +1,24 @@
 # NanoRL
 
-Ray-orchestrated reinforcement learning for large language models. **Off-policy GRPO** with [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) training (DDP single-rank or FSDP/ZeRO-3 multi-rank), [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) rollouts, and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) moving trajectories, rollout-time logprobs, and weight tensors over RDMA.
+Ray-orchestrated reinforcement learning for large language models. NanoRL
+connects [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core)
+training, [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) inference,
+and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) transport into an
+off-policy GRPO loop with rollout-side logprobs, Ray-managed train actors,
+FSDP/ZeRO-3, RDMA weight sync, held-out eval, and HF checkpoint export.
 
-## Status
+## What You Can Run
 
-| Milestone                              | What it proves                                                                                            | State                              |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| **M1** — TrainActor + dataloader       | Ray-managed megatron-core TrainActor pulls trajectories over SlimeRPC and runs GRPO                       | ✅ `bash scripts/m1_smoke.sh`      |
-| **M2** — RolloutActor + dataloader     | NanoDeploy serves rollouts, math verifier scores, samples + optional logprobs ship over RDMA              | ✅ `bash scripts/m2_smoke.sh`      |
-| **M3** — Train↔rollout weight sync     | DDP train side gathers, ships 8 GB Qwen3-4B → NanoDeploy workers via parallel RDMA pull                   | ✅ `bash scripts/m3_smoke.sh`      |
-| **M3+FSDP** — multi-rank ZeRO-3 + sync | Ray-managed multi-rank FSDP train on a selected node, uneven-DTensor gather, weight sync, checkpoint save | ✅ `bash scripts/m3_fsdp_smoke.sh` |
+| Path                     | What it shows                                                                                                             | Entry point                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Training example**     | A Ray-managed megatron-core TrainActor consuming trajectories and running GRPO steps                                      | `bash scripts/m1_smoke.sh`                                            |
+| **Inference / rollout**  | NanoDeploy rollout workers generate math trajectories, verify rewards, and optionally ship sampled-token logprobs         | `python -m nanorl.cli rollout-only ...` or `bash scripts/m2_smoke.sh` |
+| **RL training practice** | The complete off-policy GRPO loop: rollout logprobs as `old_logprobs`, FSDP train, weight sync, eval, and checkpoint save | `bash scripts/m3_fsdp_smoke.sh`                                       |
 
-The full off-policy GRPO loop runs end-to-end on Qwen3-4B. Rollout-side logprobs can be used as `old_logprobs` for the importance ratio, so ratios and clipping reflect real policy drift between weight syncs.
+The third path is the main validated workflow. On the bundled
+`nanorl_weird_algebra_v1` split, Qwen3-4B FSDP training improved held-out sampled
+reward from `0.4023` to `0.5625` in a 500-step smoke run. See
+`docs/weird_algebra_validation.md` for the dataset, command, and caveats.
 
 ## Quick start
 
@@ -26,43 +33,82 @@ Pre-reqs (already running on this cluster — see `docs/install.md` if any are m
 pip install -e .
 ```
 
-**Local rollout smoke** (no SlimeRPC, prints rewards):
+### 1. Training Example
+
+Run the minimal training-side example when you want to check that the
+megatron-core TrainActor, dataloader, and GRPO step are wired correctly:
+
+```bash
+NANORL_LOG_LEVEL=INFO STEPS=5 TRAIN_GPU=0 bash scripts/m1_smoke.sh
+```
+
+This is a developer smoke test for the train actor. It is useful before touching
+distributed rollout or weight sync.
+
+### 2. Inference / Rollout
+
+Run rollout-only when you want to inspect generated trajectories and verifier
+rewards without updating weights:
 
 ```bash
 python -m nanorl.cli rollout-only --cfg nanorl/configs/qwen3_4b_grpo.yaml \
   --prompts nanorl/configs/sample_prompts.jsonl --rounds 1 --no-rpc
 ```
 
-**Full M3 loop** (rollout on `.183`, Ray TrainActor on the configured train node, 5 GRPO steps with 2 weight syncs):
+To exercise the distributed rollout service path, use:
 
 ```bash
-bash scripts/m3_smoke.sh
+bash scripts/m2_smoke.sh
 ```
 
-**Multi-rank FSDP** (rollout on `.183`, ZeRO-3 train packed by Ray on `TRAIN_IP`):
+Rollout-side logprobs are enabled by default in the GRPO configs. Use
+`--no-ship-logprobs` for parity debugging when you intentionally want ratios to
+be 1.
+
+### 3. RL Training Practice
+
+This is the recommended end-to-end path. It launches NanoDeploy rollout workers,
+places Ray TrainActors on `TRAIN_IP`, trains Qwen3-4B with FSDP/ZeRO-3, syncs
+weights back to inference, evaluates on the held-out split, and saves HF-format
+checkpoints:
 
 ```bash
-TRAIN_IP=10.102.98.166 NPROC=8 bash scripts/m3_fsdp_smoke.sh
-```
+LOG_DIR=/tmp/nanorl_weird_algebra_m3_fsdp
+mkdir -p "$LOG_DIR"
 
-Useful smoke-script overrides:
-
-```bash
-PROMPTS=/tmp/train.jsonl EVAL_PROMPTS=/tmp/eval.jsonl \
-STEPS=500 EVAL_EVERY=25 SYNC_EVERY=2 \
-SAVE_DIR=/tmp/nanorl_ckpts/run SAVE_EVERY=50 SAVE_FINAL=1 \
-TRAIN_IP=10.102.98.166 NPROC=8 \
+NANORL_LOG_LEVEL=INFO \
+PROMPTS=nanorl/configs/datasets/weird_algebra_train192.jsonl \
+EVAL_PROMPTS=nanorl/configs/datasets/weird_algebra_test64.jsonl \
+LIMIT_PROMPTS=192 \
+EVAL_LIMIT=64 \
+EVAL_EVERY=25 \
+STEPS=500 \
+SYNC_EVERY=2 \
+ROUNDS=1000 \
+NPROC=8 \
+TRAIN_IP=10.102.98.166 \
+LOG_DIR="$LOG_DIR" \
+SAVE_DIR="$LOG_DIR/checkpoints" \
+SAVE_EVERY=100 \
+SAVE_FINAL=1 \
 bash scripts/m3_fsdp_smoke.sh
 ```
 
-**Dashboard** for a smoke run:
+For a shorter integration check, lower `STEPS`:
+
+```bash
+STEPS=20 EVAL_EVERY=5 TRAIN_IP=10.102.98.166 NPROC=8 \
+bash scripts/m3_fsdp_smoke.sh
+```
+
+Dashboard for a run:
 
 ```bash
 nanorl-dashboard \
-  --train-jsonl /tmp/nanorl_smoke/m3_train.jsonl \
-  --producer-log /tmp/nanorl_smoke/m3_producer.log \
+  --train-jsonl "$LOG_DIR/m3_fsdp_train.jsonl" \
+  --producer-log "$LOG_DIR/m3_fsdp_producer.log" \
   --expect-sync \
-  --out /tmp/nanorl_smoke/dashboard.html
+  --out "$LOG_DIR/dashboard.html"
 ```
 
 The generated HTML is static and highlights finite loss, loss trend, reward
