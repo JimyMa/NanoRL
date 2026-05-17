@@ -1,7 +1,7 @@
-"""Rollout engine: NanoInfra LLM + verifier + SlimeRPC publisher.
+"""Rollout engine: NanoDeploy LLM + verifier + SlimeRPC publisher.
 
 This is the rollout actor. It is *not* wrapped in ``@ray.remote`` because
-NanoInfra's ``LLM`` already spawns its own per-GPU Ray sub-actors (see
+NanoDeploy's ``LLM`` already spawns its own per-GPU Ray sub-actors (see
 ``nanodeploy/engine/ray_executor.py``) — wrapping again would just add a
 fan-out hop. When M3 needs the train-side driver to drive the rollout
 lifecycle, we can wrap ``RolloutEngine`` in a thin Ray actor or call
@@ -103,7 +103,7 @@ class RolloutStats:
 
 
 def _validate_model_path(path: str) -> None:
-    """Fast pre-flight check; NanoInfra startup is expensive so we want to
+    """Fast pre-flight check; NanoDeploy startup is expensive so we want to
     fail in seconds, not minutes, when the path is wrong."""
     if not os.path.isdir(path):
         raise FileNotFoundError(f"model dir does not exist: {path}")
@@ -158,7 +158,7 @@ class RolloutEngine:
         if startup_validate:
             _validate_model_path(model_cfg.hf_path)
 
-        # Lazy imports — NanoInfra has heavy GPU deps; failing on a CPU dev
+        # Lazy imports — NanoDeploy has heavy GPU deps; failing on a CPU dev
         # box should land at construction time, not at import.
         from nanodeploy import Sequence as NanoSequence
         from nanodeploy.llm_component import LLM
@@ -209,7 +209,7 @@ class RolloutEngine:
 
     @property
     def llm(self):
-        """The underlying NanoInfra ``LLMComponent``. Exposed so the M3
+        """The underlying NanoDeploy ``LLMComponent``. Exposed so the M3
         weight-sync RPC handler can call ``llm.update_weights(...)``
         without poking at private attrs."""
         return self._llm
@@ -234,8 +234,8 @@ class RolloutEngine:
 
     def _sampling_params(self):
         # ``return_completion_logprobs`` opts the worker into the new
-        # NanoInfra logprob path (Sampler.forward_with_logprobs ->
-        # Sequence.completion_logprobs). Newer NanoInfra builds accept
+        # NanoDeploy logprob path (Sampler.forward_with_logprobs ->
+        # Sequence.completion_logprobs). Newer NanoDeploy builds accept
         # the kwarg; older ones don't — fall back gracefully so a stale
         # build doesn't break the rollout.
         kwargs = dict(
@@ -248,7 +248,7 @@ class RolloutEngine:
         try:
             return self._SamplingParams(**kwargs)
         except TypeError:
-            # NanoInfra build without the new flag — drop it and proceed.
+            # NanoDeploy build without the new flag — drop it and proceed.
             kwargs.pop("return_completion_logprobs", None)
             return self._SamplingParams(**kwargs)
 
@@ -286,7 +286,7 @@ class RolloutEngine:
                 response_ids, skip_special_tokens=True
             )
             # Read rollout-time per-token logprobs when the patched
-            # NanoInfra populated them. Empty (legacy build, or sampling
+            # NanoDeploy populated them. Empty (legacy build, or sampling
             # didn't request them) → None so trainer falls back cleanly.
             raw_lp = getattr(seq, "completion_logprobs", None)
             response_logprobs = list(raw_lp) if raw_lp else None

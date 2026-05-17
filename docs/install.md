@@ -19,7 +19,7 @@ pytest tests/ -q
 
 # 4. End-to-end smokes
 bash scripts/m1_smoke.sh        # single-rank DDP train + rollout (~3 min)
-bash scripts/m2_smoke.sh        # rollout-only + consumer (~2 min)
+bash scripts/m2_smoke.sh        # rollout + consumer (~2 min)
 bash scripts/m3_smoke.sh        # DDP train + 2 weight syncs (~3 min)
 bash scripts/m3_fsdp_smoke.sh   # 2-rank FSDP train + 2 weight syncs (~5 min)
 ```

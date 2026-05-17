@@ -6,8 +6,8 @@ transform: each Megatron parameter on this rank already holds the full
 tensor. For TP/PP/EP > 1 (deferred), we'd inject collective gathers here.
 
 The shipped tensors are what a fresh ``transformers.AutoModelForCausalLM``
-checkpoint of Qwen3 dense would expose — the same names NanoInfra's
-``model_runner.self.model`` indexes by, so each NanoInfra worker can call
+checkpoint of Qwen3 dense would expose — the same names NanoDeploy's
+``model_runner.self.model`` indexes by, so each NanoDeploy worker can call
 its existing per-parameter ``weight_loader`` to slice for its own TP rank.
 """
 
@@ -129,7 +129,7 @@ def gather_full_state_dict(
     an all-gather first and re-shard after). For TP/PP > 1 there'd be an
     additional collective step before the walk; that's deferred work.
 
-    Parameters NanoInfra doesn't recognize (e.g. ``output_layer.weight``
+    Parameters NanoDeploy doesn't recognize (e.g. ``output_layer.weight``
     when the model uses tied embeddings, or any ``_extra_state`` buffer)
     are simply not produced — the rollout side's
     ``apply_named_tensors_in_place`` skips unknowns silently anyway.

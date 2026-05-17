@@ -3,7 +3,7 @@
 Entrypoints:
 
 ```bash
-python -m nanorl.cli {rollout-only,train,consume-ray,eval} ...
+python -m nanorl.cli {rollout,train,consume-ray,eval} ...
 nanorl-dashboard --train-jsonl /tmp/nanorl_smoke/m3_train.jsonl
 ```
 
@@ -12,7 +12,7 @@ Or, after `pip install -e .`, the same as `nanorl {...}` and
 
 | Command            | Status | Purpose                                                                                                                                                                  |
 | ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rollout-only`     | ✅     | Generate trajectories with NanoDeploy, score with verifier, optionally publish over SlimeRPC. M2 entry point. Can also run held-out eval and ship rollout-time logprobs. |
+| `rollout`          | ✅     | Generate trajectories with NanoDeploy, score with verifier, optionally publish over SlimeRPC. M2 entry point. Can also run held-out eval and ship rollout-time logprobs. |
 | `train`            | ✅     | Ray-managed trainer. Launch TrainActor workers as Ray actors on a chosen train node, optionally with periodic `gather_and_publish` weight sync.                          |
 | `consume-ray`      | ✅     | Run the M2 fake trajectory consumer as a Ray actor on a chosen node. Useful for placement and SlimeRPC checks.                                                           |
 | `eval`             | ✅     | Run held-out reward/pass@k evaluation on a prompt set.                                                                                                                   |
@@ -22,7 +22,7 @@ Set log level with `NANORL_LOG_LEVEL` (default `INFO`).
 
 ______________________________________________________________________
 
-## `nanorl rollout-only`
+## `nanorl rollout`
 
 Stand up a `RolloutEngine` (NanoDeploy `LLM` + verifier) and run one or more rollout rounds. Trajectories are scored, optionally appended to a JSONL for offline inspection, and optionally published over SlimeRPC for a downstream consumer.
 
@@ -160,6 +160,6 @@ step/sync timings.
 | ------- | ----------------------------------------------------------------- |
 | `0`     | Success.                                                          |
 | `1`     | Subcommand failed.                                                |
-| `2`     | No valid prompts in the JSONL (rollout-only).                     |
+| `2`     | No valid prompts in the JSONL (rollout).                          |
 | `3`     | NaN loss detected during train.                                   |
 | nonzero | Uncaught exception. SIGINT triggers a clean shutdown with code 0. |

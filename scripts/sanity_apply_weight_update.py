@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot sanity proof for ``LLMEngine.update_weights`` (NanoInfra patch).
+"""One-shot sanity proof for ``LLMEngine.update_weights`` (NanoDeploy patch).
 
 This is the M3a guardrail. It verifies two claims:
 
@@ -74,7 +74,7 @@ def main() -> int:
         cfg.model.tokenizer_path or cfg.model.hf_path
     )
 
-    log.info("booting NanoInfra LLM (this takes ~90s on Qwen3-4B)...")
+    log.info("booting NanoDeploy LLM (this takes ~90s on Qwen3-4B)...")
     llm = LLM(_build_nano_config(cfg.model, cfg.infer))
     log.info("LLM ready")
 

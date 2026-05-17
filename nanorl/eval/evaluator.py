@@ -177,7 +177,7 @@ class Evaluator:
 
     The engine's existing ``generate(items)`` returns ``PendingTrajectory``s;
     we inject sampling overrides via ``_eval_sampling_override`` so the
-    same NanoInfra LLM is reused (no second engine to boot). Verifier
+    same NanoDeploy LLM is reused (no second engine to boot). Verifier
     defaults to the engine's bound verifier.
     """
 

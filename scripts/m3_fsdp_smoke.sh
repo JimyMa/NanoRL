@@ -70,12 +70,12 @@ cleanup() {
       kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
     fi
   done
-  pkill -KILL -f "nanorl.cli (rollout-only|train)" 2>/dev/null || true
+  pkill -KILL -f "nanorl.cli (rollout|train)" 2>/dev/null || true
   exit "$rc"
 }
 trap cleanup EXIT INT TERM
 
-echo "[m3-fsdp-smoke] starting rollout producer (NanoInfra startup ~90s)..."
+echo "[m3-fsdp-smoke] starting rollout producer (NanoDeploy startup ~90s)..."
 # DLSLIME_MR_WAIT_TIMEOUT_S: producer-side wait for the trainer's proxy
 # mailbox MR. With 8-rank FSDP + cold HF safetensors load, the trainer
 # can take 5-8 minutes to reach _build_trajectory_client; 900s (15 min)
@@ -84,7 +84,7 @@ echo "[m3-fsdp-smoke] starting rollout producer (NanoInfra startup ~90s)..."
 DLSLIME_MR_WAIT_TIMEOUT_S="${DLSLIME_MR_WAIT_TIMEOUT_S:-900}" \
 DLSLIME_TIMING="${DLSLIME_TIMING:-1}" \
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
-setsid python -m nanorl.cli rollout-only \
+setsid python -m nanorl.cli rollout \
   --cfg "$CFG" \
   --prompts "$PROMPTS" \
   --rounds "$ROUNDS" \

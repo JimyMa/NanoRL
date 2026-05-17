@@ -2,7 +2,7 @@
 
 Subcommands:
 
-    nanorl rollout-only --cfg=... --prompts=PATH [--no-rpc] [--save-jsonl=PATH]
+    nanorl rollout --cfg=... --prompts=PATH [--no-rpc] [--save-jsonl=PATH]
         Stand up RolloutEngine + TrajectoryService. Reads a JSONL of
         ``{"prompt": ..., "reference": ..., "group_id": ...}``; runs ``rounds``
         rollouts; serves them over SlimeRPC for any consumer to pull.
@@ -124,7 +124,7 @@ def _install_sigint_handler():
     signal.signal(signal.SIGTERM, _handle)
 
 
-def _rollout_only(args: argparse.Namespace) -> int:
+def _rollout(args: argparse.Namespace) -> int:
     """Stand up rollout engine + TrajectoryService; serve until killed."""
     from nanorl.actors.rollout import RolloutEngine
     from nanorl.config import NanoRLCfg
@@ -166,7 +166,7 @@ def _rollout_only(args: argparse.Namespace) -> int:
     )
 
     if args.dry_run:
-        logger.info("dry-run: config + prompts validated; not starting NanoInfra")
+        logger.info("dry-run: config + prompts validated; not starting NanoDeploy")
         return 0
 
     service = TrajectoryService(capacity=cfg.rl.group_size * len(items) * 4)
@@ -203,7 +203,7 @@ def _rollout_only(args: argparse.Namespace) -> int:
             consumer_alias=consumer_alias,
         )
         logger.info(
-            "rollout-only: rpc server pending producer=%s expecting consumer=%s "
+            "rollout: rpc server pending producer=%s expecting consumer=%s "
             "(weight-sync RPC enabled)",
             producer_alias,
             consumer_alias,
@@ -309,7 +309,7 @@ def _rollout_only(args: argparse.Namespace) -> int:
                 break
 
         if args.serve_forever and agent is not None:
-            logger.info("rollout-only: idle, serving published trajectories")
+            logger.info("rollout: idle, serving published trajectories")
             while True:
                 time.sleep(60)
     except KeyboardInterrupt:
@@ -817,7 +817,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="nanorl")
     sp = p.add_subparsers(dest="cmd", required=True)
 
-    r = sp.add_parser("rollout-only", help="run RolloutEngine + TrajectoryService")
+    r = sp.add_parser("rollout", help="run RolloutEngine + TrajectoryService")
     r.add_argument("--cfg", required=True, help="YAML config path")
     r.add_argument(
         "--prompts", required=True, help="JSONL with prompt/reference/group_id"
@@ -928,7 +928,7 @@ def main(argv: list[str] | None = None) -> int:
         default=100000,
         help="Approximate stream length cap (XADD MAXLEN ~).",
     )
-    r.set_defaults(func=_rollout_only)
+    r.set_defaults(func=_rollout)
 
     tr = sp.add_parser(
         "train",

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# End-to-end M2 smoke test: rollout-only producer + Ray-managed consumer.
+# End-to-end M2 smoke test: rollout producer + Ray-managed consumer.
 #
-# Spins up a producer (NanoInfra Qwen3-4B), waits for the first round to
+# Spins up a producer (NanoDeploy Qwen3-4B), waits for the first round to
 # finish, runs the consumer as a Ray actor, and shuts down the producer. Verifies the
-# full DLSlimeRPC trajectory dataloader path: NanoInfra → publish →
+# full DLSlimeRPC trajectory dataloader path: NanoDeploy → publish →
 # SlimeRPC → consumer → padded TrajectoryBatch.
 #
 # Pre-reqs: NanoCtrl running on http://10.102.97.179:3000, Redis on 6379,
@@ -33,7 +33,7 @@ echo "[smoke] consumer_ip=$CONSUMER_IP"
 echo "[smoke] aliases producer=$PROD_ALIAS consumer=$CONS_ALIAS"
 echo "[smoke] starting producer..."
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
-python -m nanorl.cli rollout-only \
+python -m nanorl.cli rollout \
   --cfg "$CFG" \
   --prompts "$PROMPTS" \
   --rounds "$ROUNDS" \
@@ -44,7 +44,7 @@ python -m nanorl.cli rollout-only \
 PROD_PID=$!
 trap 'kill -INT $PROD_PID 2>/dev/null || true; sleep 3; kill -KILL $PROD_PID 2>/dev/null || true' EXIT
 
-echo "[smoke] producer pid=$PROD_PID; waiting for first round (NanoInfra startup ~90s)..."
+echo "[smoke] producer pid=$PROD_PID; waiting for first round (NanoDeploy startup ~90s)..."
 for i in $(seq 1 180); do
   if grep -q "round=0 buffered" "$LOG_DIR/producer.log" 2>/dev/null; then
     echo "[smoke] producer ready after ${i}s"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# End-to-end M3 smoke: rollout-only + nanorl train with weight sync.
+# End-to-end M3 smoke: rollout + nanorl train with weight sync.
 #
-# Boots the M2-proven rollout (NanoInfra Qwen3-4B on .183) with the
+# Boots the M2-proven rollout (NanoDeploy Qwen3-4B on .183) with the
 # M3 weight-update RPC enabled, then runs the M3-enabled trainer as a
 # single-rank Ray actor for N steps with periodic
 # weight sync. After every sync, the rollout side has copied the
@@ -41,7 +41,7 @@ echo "[m3-smoke] aliases producer=$PROD_ALIAS consumer=$CONS_ALIAS"
 
 # Cleanup that runs on EXIT, SIGINT, or SIGTERM. ``setsid`` puts each
 # subprocess in its own process group so we can kill the entire group with
-# ``kill -- -PGID``; that catches NanoInfra's Ray worker children that
+# ``kill -- -PGID``; that catches NanoDeploy's Ray worker children that
 # otherwise survive Ctrl+C. ``pkill`` is the belt-and-suspenders fallback.
 PROD_PID=""
 TRAIN_PID=""
@@ -59,14 +59,14 @@ cleanup() {
       kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
     fi
   done
-  pkill -KILL -f "nanorl.cli (rollout-only|train)" 2>/dev/null || true
+  pkill -KILL -f "nanorl.cli (rollout|train)" 2>/dev/null || true
   exit "$rc"
 }
 trap cleanup EXIT INT TERM
 
-echo "[m3-smoke] starting rollout producer (NanoInfra startup ~90s)..."
+echo "[m3-smoke] starting rollout producer (NanoDeploy startup ~90s)..."
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
-setsid python -m nanorl.cli rollout-only \
+setsid python -m nanorl.cli rollout \
   --cfg "$CFG" \
   --prompts "$PROMPTS" \
   --rounds "$ROUNDS" \

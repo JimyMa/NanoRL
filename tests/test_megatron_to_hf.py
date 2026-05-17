@@ -4,7 +4,7 @@ The mapper has to be the byte-exact inverse of ``hf_to_megatron`` — a
 synthetic HF state_dict goes ``hf → megatron → hf`` and must come out the
 same. If anything is off (transposed split axis, wrong group order,
 forgotten chunk), this test catches it before we ship gibberish to a live
-NanoInfra engine.
+NanoDeploy engine.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# End-to-end M1 smoke test: rollout-only producer + Ray-managed trainer.
+# End-to-end M1 smoke test: rollout producer + Ray-managed trainer.
 #
-# Boots a NanoInfra rollout (Qwen3-4B on .183 via M2-proven path) and a
+# Boots a NanoDeploy rollout (Qwen3-4B on .183 via M2-proven path) and a
 # single-rank megatron-core TrainActor placed by Ray. The train side
 # pulls real trajectories over SlimeRPC, runs N GRPO steps with kl_beta=0,
 # and asserts every step loss is finite.
@@ -10,7 +10,7 @@
 #   * NanoCtrl on http://10.102.97.179:3000, Redis on 6379
 #   * Ray cluster reachable at 10.102.97.179:7078 (locks chmod'd if needed)
 #   * RDMA HCAs visible on the host running this script
-#   * 4 GPUs on .183 for NanoInfra (TP=4) + 1 free GPU on TRAIN_IP for trainer
+#   * 4 GPUs on .183 for NanoDeploy (TP=4) + 1 free GPU on TRAIN_IP for trainer
 #
 # Usage:
 #   bash scripts/m1_smoke.sh                          # default 10 steps
@@ -37,9 +37,9 @@ echo "[m1-smoke] cfg=$CFG steps=$STEPS"
 echo "[m1-smoke] train_ip=$TRAIN_IP"
 echo "[m1-smoke] aliases producer=$PROD_ALIAS consumer=$CONS_ALIAS"
 
-echo "[m1-smoke] starting rollout producer (NanoInfra startup ~90s)..."
+echo "[m1-smoke] starting rollout producer (NanoDeploy startup ~90s)..."
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
-python -m nanorl.cli rollout-only \
+python -m nanorl.cli rollout \
   --cfg "$CFG" \
   --prompts "$PROMPTS" \
   --rounds "$ROUNDS" \

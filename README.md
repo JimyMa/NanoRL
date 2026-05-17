@@ -18,11 +18,11 @@ export.
 
 ## What You Can Run
 
-| Path                     | What it shows                                                                                                             | Entry point                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| **Training example**     | A Ray-managed megatron-core TrainActor consuming trajectories and running GRPO steps                                      | `bash scripts/m1_smoke.sh`                                            |
-| **Inference / rollout**  | NanoDeploy rollout workers generate math trajectories, verify rewards, and optionally ship sampled-token logprobs         | `python -m nanorl.cli rollout-only ...` or `bash scripts/m2_smoke.sh` |
-| **RL training practice** | The complete off-policy GRPO loop: rollout logprobs as `old_logprobs`, FSDP train, weight sync, eval, and checkpoint save | `bash scripts/m3_fsdp_smoke.sh`                                       |
+| Path                     | What it shows                                                                                                             | Entry point                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Training example**     | A Ray-managed megatron-core TrainActor consuming trajectories and running GRPO steps                                      | `bash scripts/m1_smoke.sh`                                       |
+| **Inference / rollout**  | NanoDeploy rollout workers generate math trajectories, verify rewards, and optionally ship sampled-token logprobs         | `python -m nanorl.cli rollout ...` or `bash scripts/m2_smoke.sh` |
+| **RL training practice** | The complete off-policy GRPO loop: rollout logprobs as `old_logprobs`, FSDP train, weight sync, eval, and checkpoint save | `bash scripts/m3_fsdp_smoke.sh`                                  |
 
 The third path is the main validated workflow. On the bundled
 `nanorl_weird_algebra_v1` split, Qwen3-4B FSDP training improved held-out sampled
@@ -56,11 +56,11 @@ distributed rollout or weight sync.
 
 ### 2. Inference / Rollout
 
-Run rollout-only when you want to inspect generated trajectories and verifier
+Run rollout when you want to inspect generated trajectories and verifier
 rewards without updating weights:
 
 ```bash
-python -m nanorl.cli rollout-only --cfg nanorl/configs/qwen3_4b_grpo.yaml \
+python -m nanorl.cli rollout --cfg nanorl/configs/qwen3_4b_grpo.yaml \
   --prompts nanorl/configs/sample_prompts.jsonl --rounds 1 --no-rpc
 ```
 
@@ -128,7 +128,7 @@ generation.
 - `logprob_to_old=mean/max` tracks policy drift from the rollout policy to the current train policy.
 - `kl_to_old` is the off-policy distance actually used for monitoring. The older `kl`/`kl_mean` field is reference-model KL and remains a diagnostic unless `rl.kl_beta > 0`.
 
-Use `--no-ship-logprobs` on `rollout-only` to fall back to train-side `current_logprobs.detach()`, which makes ratios equal 1 by construction and is useful for parity debugging.
+Use `--no-ship-logprobs` on `rollout` to fall back to train-side `current_logprobs.detach()`, which makes ratios equal 1 by construction and is useful for parity debugging.
 
 ## Checkpoints
 
@@ -176,7 +176,7 @@ The four cross-process smokes (`m1`, `m2`, `m3`, `m3_fsdp`) are the integration 
 
 ```
 nanorl/
-  cli.py                    rollout-only ✅, train ✅, consume-ray ✅
+  cli.py                    rollout ✅, train ✅, consume-ray ✅
   config.py                 pydantic schemas; loaded from YAML
   actors/
     train.py                TrainActor: megatron-core (DDP or FSDP), GRPO step, weight gather, HF save
@@ -205,7 +205,7 @@ nanorl/
 
 scripts/
   m1_smoke.sh, m2_smoke.sh, m3_smoke.sh, m3_fsdp_smoke.sh   end-to-end smokes
-  fake_train_consumer.py    pulls from a running rollout-only over SlimeRPC
+  fake_train_consumer.py    pulls from a running rollout over SlimeRPC
   sanity_apply_weight_update.py  one-shot: NanoDeploy patch in/out check
   sanity_qwen3_forward.py   HF↔Megatron logit cross-check (Δ logprob ≈ 4e-4)
   diag_train_vs_ref.py      reproduces the kl-kernel-parity issue (kl_beta=0 cause)

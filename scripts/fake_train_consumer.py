@@ -1,4 +1,4 @@
-"""Tiny SlimeRPC consumer that pulls from a running rollout-only engine.
+"""Tiny SlimeRPC consumer that pulls from a running rollout engine.
 
 Used to verify M2 end-to-end without a real TrainActor. Pulls batches from
 the rollout side and prints summary stats. Decodes the first response per

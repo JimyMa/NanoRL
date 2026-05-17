@@ -1,22 +1,22 @@
 # Rollout (M2)
 
-The `rollout-only` subcommand stands up a NanoDeploy inference engine, generates `n` rollouts per prompt, scores each with a verifier, and either prints results (`--no-rpc`) or publishes them to a SlimeRPC consumer.
+The `rollout` subcommand stands up a NanoDeploy inference engine, generates `n` rollouts per prompt, scores each with a verifier, and either prints results (`--no-rpc`) or publishes them to a SlimeRPC consumer.
 
-In M3 the rollout-only process *also* exposes the `apply_weight_update` RPC that the train side calls — same SlimeRPC service, additional method.
+In M3 the rollout process *also* exposes the `apply_weight_update` RPC that the train side calls — same SlimeRPC service, additional method.
 
 ## Files
 
 | File                                                 | Role                                                                       |
 | ---------------------------------------------------- | -------------------------------------------------------------------------- |
 | `nanorl/actors/rollout.py`                           | `RolloutEngine`: wraps NanoDeploy `LLM`, drives generation, calls verifier |
-| `nanorl/cli.py:_rollout_only`                        | CLI handler                                                                |
+| `nanorl/cli.py:_rollout`                             | CLI handler                                                                |
 | `nanorl/data/trajectory_buffer.py:TrajectoryService` | SlimeRPC service: trajectory pull + M3 weight-update RPC                   |
 | `nanorl/data/data_loader.py:TrajectoryClient`        | Pull side; used by `fake_train_consumer.py` and `TrainActor`               |
 | `nanorl/rl/reward.py:MathVerifier`                   | Default verifier (`\boxed{...}` or trailing number)                        |
 | `nanorl/configs/qwen3_4b_grpo.yaml`                  | DDP variant                                                                |
 | `nanorl/configs/qwen3_4b_grpo_fsdp.yaml`             | FSDP variant (rollout config identical)                                    |
 | `nanorl/configs/sample_prompts.jsonl`                | Bundled arithmetic prompts                                                 |
-| `scripts/m2_smoke.sh`                                | rollout-only + fake_train_consumer                                         |
+| `scripts/m2_smoke.sh`                                | rollout + fake_train_consumer                                              |
 | `scripts/fake_train_consumer.py`                     | Standalone SlimeRPC consumer                                               |
 
 ## Prompts JSONL
@@ -49,10 +49,10 @@ Useful modes:
 
 ```bash
 # Off-policy path: train sees rollout-time old_logprobs.
-python -m nanorl.cli rollout-only ... --ship-logprobs
+python -m nanorl.cli rollout ... --ship-logprobs
 
 # Parity/debug path: trainer falls back to current_logprobs.detach().
-python -m nanorl.cli rollout-only ... --no-ship-logprobs
+python -m nanorl.cli rollout ... --no-ship-logprobs
 ```
 
 Rollout logs include a line like:
@@ -68,7 +68,7 @@ If this shows `0/N`, the NanoDeploy build likely lacks the `return_completion_lo
 Rollout can run non-published eval passes while serving train data:
 
 ```bash
-python -m nanorl.cli rollout-only \
+python -m nanorl.cli rollout \
   --cfg nanorl/configs/qwen3_4b_grpo_fsdp.yaml \
   --prompts /tmp/train.jsonl \
   --eval-prompts /tmp/eval.jsonl \
@@ -120,7 +120,7 @@ class Verifier(Protocol):
     def score(self, response: str, reference: str) -> float: ...
 ```
 
-Wire it in: import from `nanorl/rl/reward.py`, instantiate in `_rollout_only` (`nanorl/cli.py`), pass to `RolloutEngine(...)`. There is no `--verifier` CLI flag yet (productionization gap).
+Wire it in: import from `nanorl/rl/reward.py`, instantiate in `_rollout` (`nanorl/cli.py`), pass to `RolloutEngine(...)`. There is no `--verifier` CLI flag yet (productionization gap).
 
 ## SlimeRPC pitfalls
 

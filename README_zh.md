@@ -16,11 +16,11 @@ FSDP/ZeRO-3、RDMA 权重同步、验证集评测，以及 HF 格式 checkpoint 
 
 ## 你可以跑什么
 
-| 路径               | 说明                                                                                                         | 入口                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| **训练示例**       | Ray 管理 megatron-core TrainActor，消费轨迹并执行 GRPO step                                                  | `bash scripts/m1_smoke.sh`                                            |
-| **推理 / Rollout** | NanoDeploy workers 生成数学轨迹、打 verifier reward，并可返回 sampled-token logprobs                         | `python -m nanorl.cli rollout-only ...` 或 `bash scripts/m2_smoke.sh` |
-| **RL 训练实践**    | 完整 off-policy GRPO：rollout logprobs 作为 `old_logprobs`，FSDP 训练、权重同步、验证集评测、checkpoint 保存 | `bash scripts/m3_fsdp_smoke.sh`                                       |
+| 路径               | 说明                                                                                                         | 入口                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| **训练示例**       | Ray 管理 megatron-core TrainActor，消费轨迹并执行 GRPO step                                                  | `bash scripts/m1_smoke.sh`                                       |
+| **推理 / Rollout** | NanoDeploy workers 生成数学轨迹、打 verifier reward，并可返回 sampled-token logprobs                         | `python -m nanorl.cli rollout ...` 或 `bash scripts/m2_smoke.sh` |
+| **RL 训练实践**    | 完整 off-policy GRPO：rollout logprobs 作为 `old_logprobs`，FSDP 训练、权重同步、验证集评测、checkpoint 保存 | `bash scripts/m3_fsdp_smoke.sh`                                  |
 
 第三条是当前最重要、也已经验证过的端到端路径。在仓库内置的
 `nanorl_weird_algebra_v1` 代数集合上，Qwen3-4B FSDP 训练在 500-step smoke
@@ -55,10 +55,10 @@ NANORL_LOG_LEVEL=INFO STEPS=5 TRAIN_GPU=0 bash scripts/m1_smoke.sh
 
 ### 2. 推理 / Rollout
 
-如果你想先看模型生成、verifier reward 和轨迹格式，可以跑 rollout-only：
+如果你想先看模型生成、verifier reward 和轨迹格式，可以跑 rollout：
 
 ```bash
-python -m nanorl.cli rollout-only --cfg nanorl/configs/qwen3_4b_grpo.yaml \
+python -m nanorl.cli rollout --cfg nanorl/configs/qwen3_4b_grpo.yaml \
   --prompts nanorl/configs/sample_prompts.jsonl --rounds 1 --no-rpc
 ```
 

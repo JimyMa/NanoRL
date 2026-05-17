@@ -93,7 +93,7 @@ class SamplingCfg(pydantic.BaseModel):
     # so the trainer can use them as ``old_logprobs`` (importance-sampling
     # baseline). False reverts to the train-side ``current_logprobs.detach()``
     # fallback that gives ratios=1.0 by construction. Requires the
-    # ``return_completion_logprobs`` patch on the rollout's NanoInfra build.
+    # ``return_completion_logprobs`` patch on the rollout's NanoDeploy build.
     ship_logprobs: bool = True
 
 

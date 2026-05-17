@@ -14,7 +14,7 @@ M3 additions: the rollout side may also pass a ``llm`` and a
 ``weight_transport`` (a ``WeightTransportRollout``) into the service. When
 present, the train side can RPC-call ``apply_weight_update`` with a
 pickled ``WeightManifest``; we pull weights via RDMA, fan them out to
-NanoInfra workers via ``llm.update_weights``, release the receive
+NanoDeploy workers via ``llm.update_weights``, release the receive
 buffers, and return per-worker counts.
 """
 
@@ -56,7 +56,7 @@ class TrajectoryService:
     swap to a flatbuffer / raw mode later without changing call sites.
 
     Optional M3 fields on the producer side:
-        ``llm``               — a ``LLMComponent`` (the patched NanoInfra
+        ``llm``               — a ``LLMComponent`` (the patched NanoDeploy
                                 engine with ``update_weights``)
         ``weight_transport``  — a ``WeightTransportRollout`` already paired
                                 to the train alias
@@ -148,7 +148,7 @@ class TrajectoryService:
     def apply_weight_update(self, manifest_blob: bytes) -> bytes:
         """Pull a versioned weight set from the train side and apply to LLM.
 
-        Fast path: the manifest is forwarded to each NanoInfra worker via
+        Fast path: the manifest is forwarded to each NanoDeploy worker via
         ``LLMComponent.pull_and_apply_weights``; each worker uses its own
         ``PeerAgent`` to RDMA-read in parallel from the train side. This
         bypasses the rollout-driver→Ray cross-host serialization that was
@@ -161,12 +161,12 @@ class TrajectoryService:
         Returns pickled ``{version, n_tensors, pull_s, apply_s, counts}``.
 
         Raises ``RuntimeError`` if the service was constructed without an
-        ``llm`` (i.e. the rollout-only CLI was started without the M3
+        ``llm`` (i.e. the rollout CLI was started without the M3
         wiring).
         """
         if self._llm is None:
             raise RuntimeError(
-                "TrajectoryService was started without llm; the rollout-only "
+                "TrajectoryService was started without llm; the rollout "
                 "CLI needs to be invoked with M3 enabled."
             )
         t0 = time.monotonic()
