@@ -33,6 +33,7 @@ repos:
         exclude: >
           (?x)^(
               .*/docs/imgs/.*|
+              nanorl/configs/datasets/.*\.jsonl|
               .*/json\.hpp|
               .*/pybind_json\.hpp
           )$

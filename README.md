@@ -145,6 +145,9 @@ nanorl/
   configs/
     qwen3_4b_grpo.yaml      DDP single-rank baseline
     qwen3_4b_grpo_fsdp.yaml ZeRO-3 multi-rank variant
+    datasets/
+      weird_algebra_train192.jsonl, weird_algebra_test64.jsonl
+                              fixed 192/64 algebra split used for held-out validation
 
 scripts/
   m1_smoke.sh, m2_smoke.sh, m3_smoke.sh, m3_fsdp_smoke.sh   end-to-end smokes
@@ -163,15 +166,16 @@ NanoDeploy patches (in /mnt/nvme1n1/ml_research/majinming/src/NanoDeploy/NanoDep
 
 ## Documentation
 
-| Doc                       | Read when                                                                           |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| `docs/install.md`         | Setting up a new host or debugging missing pre-reqs                                 |
-| `docs/architecture.md`    | How Ray, NanoDeploy, megatron-core, DLSlime fit together                            |
-| `docs/cli.md`             | Every CLI flag with examples                                                        |
-| `docs/rollout.md`         | M2 walkthrough — config, JSONL format, smoke output                                 |
-| `docs/training.md`        | M1/M3 walkthrough — Ray TrainActors, DDP/FSDP recipes, weight sync, checkpoint save |
-| `docs/data_plane.md`      | SlimeRPC trajectory contract, raw-RDMA weight transport                             |
-| `docs/troubleshooting.md` | Failures we have actually hit and how we fixed them                                 |
+| Doc                                | Read when                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `docs/install.md`                  | Setting up a new host or debugging missing pre-reqs                                 |
+| `docs/architecture.md`             | How Ray, NanoDeploy, megatron-core, DLSlime fit together                            |
+| `docs/cli.md`                      | Every CLI flag with examples                                                        |
+| `docs/rollout.md`                  | M2 walkthrough — config, JSONL format, smoke output                                 |
+| `docs/training.md`                 | M1/M3 walkthrough — Ray TrainActors, DDP/FSDP recipes, weight sync, checkpoint save |
+| `docs/data_plane.md`               | SlimeRPC trajectory contract, raw-RDMA weight transport                             |
+| `docs/weird_algebra_validation.md` | Fixed generated algebra split and the verified Qwen3-4B FSDP improvement run        |
+| `docs/troubleshooting.md`          | Failures we have actually hit and how we fixed them                                 |
 
 ## Known limitations
 
