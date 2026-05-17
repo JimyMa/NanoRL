@@ -105,18 +105,14 @@ STEPS=20 EVAL_EVERY=5 TRAIN_IP=10.102.98.166 NPROC=8 \
 bash scripts/m3_fsdp_smoke.sh
 ```
 
-生成一次静态 dashboard：
+查看 TensorBoard：
 
 ```bash
-nanorl-dashboard \
-  --train-jsonl "$LOG_DIR/m3_fsdp_train.jsonl" \
-  --producer-log "$LOG_DIR/m3_fsdp_producer.log" \
-  --expect-sync \
-  --out "$LOG_DIR/dashboard.html"
+tensorboard --logdir "$LOG_DIR/m3_fsdp_tb" --port 6006 --bind_all
 ```
 
-Dashboard 会检查 loss 是否有限、reward 趋势、权重同步健康度、加载 tensor 数量和
-耗时。
+smoke 脚本会默认通过 `--tb-dir` 写 TensorBoard events。JSONL 日志仍然保存在
+`$LOG_DIR` 下，方便后续排查或生成静态诊断页面。
 
 ## Rollout 侧 Logprobs
 

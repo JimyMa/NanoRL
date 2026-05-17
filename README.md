@@ -106,18 +106,15 @@ STEPS=20 EVAL_EVERY=5 TRAIN_IP=10.102.98.166 NPROC=8 \
 bash scripts/m3_fsdp_smoke.sh
 ```
 
-Dashboard for a run:
+TensorBoard for a run:
 
 ```bash
-nanorl-dashboard \
-  --train-jsonl "$LOG_DIR/m3_fsdp_train.jsonl" \
-  --producer-log "$LOG_DIR/m3_fsdp_producer.log" \
-  --expect-sync \
-  --out "$LOG_DIR/dashboard.html"
+tensorboard --logdir "$LOG_DIR/m3_fsdp_tb" --port 6006 --bind_all
 ```
 
-The generated HTML is static and highlights finite loss, loss trend, reward
-variance, weight-sync health, loaded tensor counts, and timing.
+The smoke script writes TensorBoard events by default through `--tb-dir`. The
+JSONL logs remain under `$LOG_DIR` for debugging or post-hoc dashboard
+generation.
 
 ## Rollout-side logprobs
 
