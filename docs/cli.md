@@ -10,14 +10,14 @@ nanorl-dashboard --train-jsonl /tmp/nanorl_smoke/m3_train.jsonl
 Or, after `pip install -e .`, the same as `nanorl {...}` and
 `nanorl-dashboard ...`.
 
-| Command            | Status | Purpose                                                                                                                                                                  |
-| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rollout-only`     | ✅     | Generate trajectories with NanoDeploy, score with verifier, optionally publish over SlimeRPC. M2 entry point. Can also run held-out eval and ship rollout-time logprobs. |
-| `train-only`       | ✅     | Drive a megatron-core TrainActor against an externally-running rollout. M1 entry point — no weight sync.                                                                 |
-| `train`            | ✅     | Full M3 loop: same as `train-only` plus periodic `gather_and_publish` to push trained weights into the running rollout. Supports both DDP and FSDP via `cfg.train.fsdp`. |
-| `train-ray`        | ✅     | Launch TrainActor workers as Ray actors on a chosen train node. This is the preferred FSDP path because all training GPUs are Ray-managed.                               |
-| `consume-ray`      | ✅     | Run the M2 fake trajectory consumer as a Ray actor on a chosen node. Useful for placement and SlimeRPC checks.                                                           |
-| `nanorl-dashboard` | ✅     | Static HTML dashboard for `train --log-jsonl` output and optional rollout logs.                                                                                          |
+| Command            | Status | Purpose                                                                                                                                                                   |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rollout-only`     | ✅     | Generate trajectories with NanoDeploy, score with verifier, optionally publish over SlimeRPC. M2 entry point. Can also run held-out eval and ship rollout-time logprobs.  |
+| `train-only`       | ✅     | Drive a megatron-core TrainActor against an externally-running rollout. M1 entry point — no weight sync.                                                                  |
+| `train`            | ✅     | Direct local/`torchrun` trainer. Same M3 loop as `train-only` plus periodic `gather_and_publish`, but the train process runs where the command or `torchrun` is launched. |
+| `train-ray`        | ✅     | Ray-managed trainer. Launch TrainActor workers as Ray actors on a chosen train node; preferred because training GPUs are placed by Ray.                                   |
+| `consume-ray`      | ✅     | Run the M2 fake trajectory consumer as a Ray actor on a chosen node. Useful for placement and SlimeRPC checks.                                                            |
+| `nanorl-dashboard` | ✅     | Static HTML dashboard for `train --log-jsonl` output and optional rollout logs.                                                                                           |
 
 Set log level with `NANORL_LOG_LEVEL` (default `INFO`).
 
@@ -96,7 +96,10 @@ ______________________________________________________________________
 
 ## `nanorl train`
 
-Full M3 loop: train + periodic weight sync. Supports both DDP single-rank and FSDP multi-rank (set `cfg.train.fsdp = true` and launch with `torchrun --nproc_per_node=N`).
+Full M3 loop: train + periodic weight sync. This is the direct local/`torchrun`
+path, not the Ray-managed train path. Supports both DDP single-rank and FSDP
+multi-rank (set `cfg.train.fsdp = true` and launch with
+`torchrun --nproc_per_node=N`).
 
 | Flag                    | Default  | Notes                                                                         |
 | ----------------------- | -------- | ----------------------------------------------------------------------------- |
@@ -139,7 +142,8 @@ torchrun --nproc_per_node=2 --master_port=29600 \
     --producer-alias rollout:0 --consumer-alias train:0
 ```
 
-Or just `bash scripts/m3_fsdp_smoke.sh` which orchestrates both producer and trainer.
+For day-to-day FSDP runs, prefer `train-ray` or
+`bash scripts/m3_fsdp_smoke.sh`, which places the trainer through Ray.
 
 ______________________________________________________________________
 

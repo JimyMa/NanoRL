@@ -132,7 +132,12 @@ Use `--no-ship-logprobs` on `rollout-only` to fall back to train-side `current_l
 
 ## Checkpoints
 
-`nanorl train` and `nanorl train-ray` can save HF-format checkpoints:
+Both trainer launch modes can save HF-format checkpoints:
+
+- `nanorl train`: direct local/`torchrun` trainer; the training process runs
+  where the command is launched.
+- `nanorl train-ray`: Ray-managed trainer; the driver can run elsewhere and Ray
+  packs TrainActors onto `--train-ip`.
 
 ```bash
 python -m nanorl.cli train-ray ... \
