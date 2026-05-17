@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end M1 smoke test: rollout-only producer + train-only consumer.
+# End-to-end M1 smoke test: rollout-only producer + Ray-managed trainer.
 #
 # Boots a NanoInfra rollout (Qwen3-4B on .183 via M2-proven path) and a
 # single-rank megatron-core TrainActor placed by Ray. The train side
@@ -71,7 +71,7 @@ sleep 3   # producer's serve_settle_s
 echo "[m1-smoke] starting Ray-managed trainer on $TRAIN_IP..."
 PYTHONPATH=/mnt/nvme1n1/ml_research/majinming/src/Megatron-LM \
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
-python -m nanorl.cli train-ray \
+python -m nanorl.cli train \
   --cfg "$CFG" \
   --steps "$STEPS" \
   --weight-sync-every 0 \

@@ -96,7 +96,7 @@ Each must be a directory with `config.json`, `tokenizer.json`, and `model*.safet
 ## 6. GPUs
 
 - Rollout: 4 GPUs on the host pinned by `infer.master_address` (default `10.102.97.183:6006`) for the bundled `attention_tp=4 ffn_tp=4` config.
-- Train (DDP single-rank): 1 GPU on the host running `nanorl train`.
-- Train (FSDP 2-rank): 2 GPUs on the host running `torchrun --nproc_per_node=2 ...` (set `TRAIN_GPUS` env var in the smoke script if not 6,7).
+- Train (DDP single-rank): 1 GPU on the Ray node selected by `--train-ip`.
+- Train (FSDP 2-rank): 2 GPUs on the Ray node selected by `--train-ip`.
 
 A 2-rank FSDP run of Qwen3-4B with the bundled config uses ~50 GB per train GPU.

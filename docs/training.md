@@ -1,10 +1,14 @@
 # Training (M1 + M3)
 
-NanoRL's training side has two recipes, both running on real Qwen3-4B with the M2 rollout pipeline as the trajectory source.
+NanoRL's training side is Ray-managed. `nanorl train` launches TrainActor
+workers as Ray actors on the requested `TRAIN_IP`; the shell that starts the
+driver does not have to be the training node.
 
 ## DDP single-rank (M1 / M3 baseline)
 
-`nanorl train` and `nanorl train-ray --nproc 1` build a megatron-core `GPTModel` wrapped in `megatron.core.distributed.DistributedDataParallel`. Each parameter is a regular `torch.Tensor` on this rank's GPU.
+`nanorl train --nproc 1` builds a megatron-core `GPTModel` wrapped in
+`megatron.core.distributed.DistributedDataParallel`. Each parameter is a regular
+`torch.Tensor` on this rank's GPU.
 
 ```bash
 bash scripts/m3_smoke.sh
@@ -25,7 +29,8 @@ Per sync:
 | apply_s | ~0.85 s (in-place `param.data.copy_`, no CUDA-graph recapture)                   |
 | Wall    | ~5 s                                                                             |
 
-The smoke scripts use `train-ray`, so the shell can run on a driver node while Ray places the TrainActor on the requested `TRAIN_IP`.
+The smoke scripts use `nanorl train`, so the shell can run on a driver node
+while Ray places the TrainActor on the requested `TRAIN_IP`.
 
 ## FSDP multi-rank (M3+ ZeRO-3)
 
@@ -45,7 +50,9 @@ Smoke output (5 train steps × 2 ranks, 2 syncs):
 trainer exit=0
 ```
 
-The train process is Ray-managed: `scripts/m3_fsdp_smoke.sh` starts rollout on the rollout node, waits for the first batch, then launches `nanorl.cli train-ray` with a strict-pack placement group on `TRAIN_IP`.
+The train process is Ray-managed: `scripts/m3_fsdp_smoke.sh` starts rollout on
+the rollout node, waits for the first batch, then launches `nanorl.cli train`
+with a strict-pack placement group on `TRAIN_IP`.
 
 ### Per-sync timing comparison
 
@@ -85,10 +92,10 @@ For base models set `model.apply_chat_template: false`. Some Qwen base checkpoin
 
 ## Checkpoint save
 
-Both `train` and `train-ray` support HF-format checkpoint export:
+`nanorl train` supports HF-format checkpoint export:
 
 ```bash
-python -m nanorl.cli train-ray ... \
+python -m nanorl.cli train ... \
   --save-dir /tmp/nanorl_ckpts/my_run \
   --save-every 50 \
   --save-final
@@ -100,7 +107,9 @@ Each checkpoint writes:
 - tokenizer/config files copied from `cfg.model.hf_path`
 - `step_XXXXXX/nanorl_checkpoint.json`
 
-In `train-ray`, the path is local to the Ray train node (`--train-ip`), not necessarily the driver node. This is a weights-only export path; optimizer state, dataloader position, and RNG state are not restored yet.
+The path is local to the Ray train node (`--train-ip`), not necessarily the
+driver node. This is a weights-only export path; optimizer state, dataloader
+position, and RNG state are not restored yet.
 
 ## Weight sync internals
 

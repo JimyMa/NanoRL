@@ -130,7 +130,7 @@ if [[ -n "$SAVE_DIR" ]]; then
 fi
 PYTHONPATH=/mnt/nvme1n1/ml_research/majinming/src/Megatron-LM \
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
-setsid python -m nanorl.cli train-ray \
+setsid python -m nanorl.cli train \
     --cfg "$CFG" \
     --steps "$STEPS" \
     --weight-sync-every "$SYNC_EVERY" \

@@ -3,21 +3,20 @@
 Entrypoints:
 
 ```bash
-python -m nanorl.cli {rollout-only,train-only,train,train-ray,consume-ray} ...
+python -m nanorl.cli {rollout-only,train,consume-ray,eval} ...
 nanorl-dashboard --train-jsonl /tmp/nanorl_smoke/m3_train.jsonl
 ```
 
 Or, after `pip install -e .`, the same as `nanorl {...}` and
 `nanorl-dashboard ...`.
 
-| Command            | Status | Purpose                                                                                                                                                                   |
-| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rollout-only`     | ✅     | Generate trajectories with NanoDeploy, score with verifier, optionally publish over SlimeRPC. M2 entry point. Can also run held-out eval and ship rollout-time logprobs.  |
-| `train-only`       | ✅     | Drive a megatron-core TrainActor against an externally-running rollout. M1 entry point — no weight sync.                                                                  |
-| `train`            | ✅     | Direct local/`torchrun` trainer. Same M3 loop as `train-only` plus periodic `gather_and_publish`, but the train process runs where the command or `torchrun` is launched. |
-| `train-ray`        | ✅     | Ray-managed trainer. Launch TrainActor workers as Ray actors on a chosen train node; preferred because training GPUs are placed by Ray.                                   |
-| `consume-ray`      | ✅     | Run the M2 fake trajectory consumer as a Ray actor on a chosen node. Useful for placement and SlimeRPC checks.                                                            |
-| `nanorl-dashboard` | ✅     | Static HTML dashboard for `train --log-jsonl` output and optional rollout logs.                                                                                           |
+| Command            | Status | Purpose                                                                                                                                                                  |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `rollout-only`     | ✅     | Generate trajectories with NanoDeploy, score with verifier, optionally publish over SlimeRPC. M2 entry point. Can also run held-out eval and ship rollout-time logprobs. |
+| `train`            | ✅     | Ray-managed trainer. Launch TrainActor workers as Ray actors on a chosen train node, optionally with periodic `gather_and_publish` weight sync.                          |
+| `consume-ray`      | ✅     | Run the M2 fake trajectory consumer as a Ray actor on a chosen node. Useful for placement and SlimeRPC checks.                                                           |
+| `eval`             | ✅     | Run held-out reward/pass@k evaluation on a prompt set.                                                                                                                   |
+| `nanorl-dashboard` | ✅     | Static HTML dashboard for `train --log-jsonl` output and optional rollout logs.                                                                                          |
 
 Set log level with `NANORL_LOG_LEVEL` (default `INFO`).
 
@@ -75,81 +74,9 @@ When SlimeRPC is enabled (no `--no-rpc`), the rollout side also exposes the M3 `
 
 ______________________________________________________________________
 
-## `nanorl train-only`
-
-Drive a single-rank megatron-core TrainActor (DDP) against an externally-running rollout. **No weight sync** — equivalent to M1.
-
-| Flag                 | Default  | Notes                                |
-| -------------------- | -------- | ------------------------------------ |
-| `--cfg PATH`         | required | YAML config                          |
-| `--steps N`          | `10`     | Number of GRPO steps                 |
-| `--producer-alias S` | from cfg | Rollout to pull trajectories from    |
-| `--consumer-alias S` | from cfg | This train's alias                   |
-| `--master-port N`    | `29500`  | torch.distributed init port          |
-| `--log-jsonl PATH`   | none     | Per-step `TrainStats` JSONL          |
-| `--wandb-project S`  | none     | Enable W&B logging                   |
-| `--wandb-run-name S` | none     | W&B run name                         |
-| `--tb-dir PATH`      | none     | Enable TensorBoard event logging     |
-| `--dry-run`          | off      | Build config, exit before TrainActor |
-
-______________________________________________________________________
-
 ## `nanorl train`
 
-Full M3 loop: train + periodic weight sync. This is the direct local/`torchrun`
-path, not the Ray-managed train path. Supports both DDP single-rank and FSDP
-multi-rank (set `cfg.train.fsdp = true` and launch with
-`torchrun --nproc_per_node=N`).
-
-| Flag                    | Default  | Notes                                                                         |
-| ----------------------- | -------- | ----------------------------------------------------------------------------- |
-| `--cfg PATH`            | required | YAML config                                                                   |
-| `--steps N`             | `10`     | Number of GRPO steps                                                          |
-| `--weight-sync-every N` | from cfg | Sync interval (overrides `cfg.weight_sync_every`; `0` disables)               |
-| `--producer-alias S`    | from cfg | Rollout to pull trajectories from                                             |
-| `--consumer-alias S`    | from cfg | This train's alias (used as alias prefix; per-rank suffixes added under FSDP) |
-| `--master-port N`       | `29500`  | Single-rank only — torchrun sets it under FSDP                                |
-| `--log-jsonl PATH`      | none     | Per-step `TrainStats` + `weight_sync` events                                  |
-| `--wandb-project S`     | none     | Enable W&B logging                                                            |
-| `--wandb-run-name S`    | none     | W&B run name                                                                  |
-| `--tb-dir PATH`         | none     | Enable TensorBoard event logging                                              |
-| `--save-dir PATH`       | none     | Write HF-format checkpoints under `step_XXXXXX/`                              |
-| `--save-every N`        | `0`      | Save every N steps; `0` disables periodic saves                               |
-| `--save-final`          | off      | Save one final checkpoint during shutdown                                     |
-| `--dry-run`             | off      | Build config, exit before TrainActor                                          |
-
-### Examples
-
-**DDP single-rank (M3 baseline):**
-
-```bash
-python -m nanorl.cli train \
-  --cfg nanorl/configs/qwen3_4b_grpo.yaml \
-  --steps 10 --weight-sync-every 2 \
-  --producer-alias rollout:0 --consumer-alias train:0 \
-  --log-jsonl /tmp/train.jsonl
-```
-
-**FSDP 2-rank (ZeRO-3):**
-
-```bash
-CUDA_VISIBLE_DEVICES=6,7 \
-PYTHONPATH=/mnt/nvme1n1/ml_research/majinming/src/Megatron-LM \
-torchrun --nproc_per_node=2 --master_port=29600 \
-  -m nanorl.cli train \
-    --cfg nanorl/configs/qwen3_4b_grpo_fsdp.yaml \
-    --steps 5 --weight-sync-every 2 \
-    --producer-alias rollout:0 --consumer-alias train:0
-```
-
-For day-to-day FSDP runs, prefer `train-ray` or
-`bash scripts/m3_fsdp_smoke.sh`, which places the trainer through Ray.
-
-______________________________________________________________________
-
-## `nanorl train-ray`
-
-Launch one TrainActor Ray worker per GPU on a selected train node, packed into one Ray placement group. This is the preferred M3 FSDP launch path: the command can be run from a driver node, while the trainer itself runs on `--train-ip`.
+Launch one TrainActor Ray worker per GPU on a selected train node, packed into one Ray placement group. The command can be run from a driver node, while the trainer itself runs on `--train-ip`. This is the only supported train launch path.
 
 | Flag                    | Default         | Notes                                                              |
 | ----------------------- | --------------- | ------------------------------------------------------------------ |
@@ -174,7 +101,7 @@ Launch one TrainActor Ray worker per GPU on a selected train node, packed into o
 Example:
 
 ```bash
-python -m nanorl.cli train-ray \
+python -m nanorl.cli train \
   --cfg nanorl/configs/qwen3_4b_grpo_fsdp.yaml \
   --steps 500 --weight-sync-every 2 \
   --producer-alias rollout:run --consumer-alias train:run \
@@ -185,7 +112,7 @@ python -m nanorl.cli train-ray \
   --save-every 50 --save-final
 ```
 
-In Ray mode checkpoint paths are local to the train node where the worker runs.
+Checkpoint paths are local to the train node where the worker runs.
 
 ______________________________________________________________________
 
@@ -234,5 +161,5 @@ step/sync timings.
 | `0`     | Success.                                                          |
 | `1`     | Subcommand failed.                                                |
 | `2`     | No valid prompts in the JSONL (rollout-only).                     |
-| `3`     | NaN loss detected (train / train-only).                           |
+| `3`     | NaN loss detected during train.                                   |
 | nonzero | Uncaught exception. SIGINT triggers a clean shutdown with code 0. |

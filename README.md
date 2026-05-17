@@ -132,15 +132,12 @@ Use `--no-ship-logprobs` on `rollout-only` to fall back to train-side `current_l
 
 ## Checkpoints
 
-Both trainer launch modes can save HF-format checkpoints:
-
-- `nanorl train`: direct local/`torchrun` trainer; the training process runs
-  where the command is launched.
-- `nanorl train-ray`: Ray-managed trainer; the driver can run elsewhere and Ray
-  packs TrainActors onto `--train-ip`.
+`nanorl train` can save HF-format checkpoints. The trainer is Ray-managed: the
+driver can run on a different node, while Ray packs TrainActors onto
+`--train-ip`.
 
 ```bash
-python -m nanorl.cli train-ray ... \
+python -m nanorl.cli train ... \
   --save-dir /tmp/nanorl_ckpts/my_run \
   --save-every 50 \
   --save-final
@@ -179,7 +176,7 @@ The four cross-process smokes (`m1`, `m2`, `m3`, `m3_fsdp`) are the integration 
 
 ```
 nanorl/
-  cli.py                    rollout-only ✅, train-only ✅, train ✅, train-ray ✅, consume-ray ✅
+  cli.py                    rollout-only ✅, train ✅, consume-ray ✅
   config.py                 pydantic schemas; loaded from YAML
   actors/
     train.py                TrainActor: megatron-core (DDP or FSDP), GRPO step, weight gather, HF save

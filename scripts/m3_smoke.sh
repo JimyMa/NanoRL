@@ -99,7 +99,7 @@ echo "[m3-smoke] starting Ray-managed trainer on $TRAIN_IP..."
 TRAIN_RC=0
 PYTHONPATH=/mnt/nvme1n1/ml_research/majinming/src/Megatron-LM \
 NANORL_LOG_LEVEL="${NANORL_LOG_LEVEL:-INFO}" \
-setsid python -m nanorl.cli train-ray \
+setsid python -m nanorl.cli train \
   --cfg "$CFG" \
   --steps "$STEPS" \
   --weight-sync-every "$SYNC_EVERY" \

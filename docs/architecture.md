@@ -6,7 +6,7 @@ NanoRL is the assembly. Every component is reused; only the integration glue is 
 
 ```
                   ┌─────────────────────────────────────────────┐
-                  │       nanorl train / train-ray              │
+                  │              nanorl train                    │
                   │   - driver loop                             │
                   │   - Ray placement for TrainActors           │
                   │   - weight-sync / save barriers             │
@@ -31,7 +31,7 @@ NanoRL is the assembly. Every component is reused; only the integration glue is 
 
 ### Control plane — Ray + NanoCtrl
 
-- **Ray** owns process placement, NanoDeploy worker lifecycle, TrainActor placement (`train-ray`), and inter-node scheduling.
+- **Ray** owns process placement, NanoDeploy worker lifecycle, TrainActor placement (`nanorl train`), and inter-node scheduling.
 - **NanoCtrl + Redis** is the DLSlime peer registry: every PeerAgent (one per train rank, one per NanoDeploy worker, one per rollout driver) registers an alias and an RDMA memory-region table; remote peers look them up to bootstrap connections.
 
 ### Data plane — DLSlime
@@ -54,7 +54,7 @@ The GRPO loss math (`nanorl/rl/grpo_loss.py`) is vendored byte-for-byte from `me
 
 ### Inference — NanoDeploy
 
-The rollout actor is a thin wrapper over `nanodeploy.llm_component.LLM`. NanoDeploy spawns its own per-GPU Ray sub-actors (`ModelRunner`s), while NanoRL's train side uses its own Ray actors in `train-ray`. The M3 patch added two methods:
+The rollout actor is a thin wrapper over `nanodeploy.llm_component.LLM`. NanoDeploy spawns its own per-GPU Ray sub-actors (`ModelRunner`s), while NanoRL's train side uses its own Ray actors in `nanorl train`. The M3 patch added two methods:
 
 - `ModelRunner.apply_weight_update(named_tensors)` — in-place copy via the parameter's existing `weight_loader` callback (handles TP shard slicing automatically). In-place semantics preserve captured CUDA-graph addresses.
 - `ModelRunner.pull_and_apply_weights(manifest_blob, train_alias)` — uses the worker's own PeerAgent to RDMA-read the manifest entries directly, skipping the Ray fan-out from the rollout driver.

@@ -7,12 +7,9 @@ Subcommands:
         ``{"prompt": ..., "reference": ..., "group_id": ...}``; runs ``rounds``
         rollouts; serves them over SlimeRPC for any consumer to pull.
 
-    nanorl train-only   --cfg=... --steps=N
-        (placeholder) Drive a megatron-core TrainActor; pulls trajectories
-        from a SlimeRPC producer and runs N GRPO steps. Lands with M1.
-
     nanorl train        --cfg=... --steps=N
-        (placeholder) The full M3 loop. Lands after M1 + M2.
+        Ray-managed TrainActors; pulls trajectories from a SlimeRPC producer,
+        runs GRPO, and periodically syncs weights back to rollout.
 """
 
 from __future__ import annotations
@@ -24,7 +21,6 @@ import os
 import signal
 import sys
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Iterator
 
@@ -330,182 +326,7 @@ def _rollout_only(args: argparse.Namespace) -> int:
     return 0
 
 
-def _train_only(args: argparse.Namespace) -> int:
-    """Drive a single-rank megatron-core TrainActor against a SlimeRPC source."""
-    from nanorl.actors.train import TrainActor
-    from nanorl.config import NanoRLCfg
-
-    _install_sigint_handler()
-    cfg = NanoRLCfg.from_yaml(args.cfg)
-
-    if args.dry_run:
-        # Just exercise config + model build path, no NanoCtrl, no NanoInfra.
-        logger.info("dry-run: train-only config validated; not building TrainActor")
-        return 0
-
-    actor = TrainActor(
-        cfg,
-        producer_alias=args.producer_alias,
-        consumer_alias=args.consumer_alias,
-        master_port=args.master_port,
-    )
-
-    log_path = args.log_jsonl
-    log_writer = _open_jsonl_writer(log_path)
-
-    try:
-        for s in range(args.steps):
-            stats = actor.train_step()
-            logger.info(
-                "step=%d loss=%.4f mean_reward=%.3f mean_adv=%.3f tokens=%d elapsed=%.2fs",
-                stats.step,
-                stats.loss,
-                stats.mean_reward,
-                stats.mean_advantage,
-                stats.response_tokens,
-                stats.elapsed_s,
-            )
-            if log_writer is not None:
-                log_writer.write(json.dumps(asdict(stats)) + "\n")
-            if not (stats.loss == stats.loss):  # NaN check
-                logger.error("loss is NaN at step %d; aborting", stats.step)
-                return 3
-    except KeyboardInterrupt:
-        logger.info("interrupted; cleaning up")
-    finally:
-        if log_writer is not None:
-            log_writer.close()
-        actor.close()
-    return 0
-
-
 def _train(args: argparse.Namespace) -> int:
-    """Full M3 loop: train_step + periodic gather_and_publish to a running rollout."""
-    from nanorl.actors.train import TrainActor
-    from nanorl.config import NanoRLCfg
-    from nanorl.metrics import build_logger
-
-    _install_sigint_handler()
-    cfg_path = str(Path(args.cfg).resolve())
-    cfg = NanoRLCfg.from_yaml(cfg_path)
-
-    if args.weight_sync_every is not None:
-        cfg.weight_sync_every = args.weight_sync_every
-
-    if args.dry_run:
-        logger.info("dry-run: train config validated; not building TrainActor")
-        return 0
-
-    # Metrics: rank 0 owns the sinks. Other ranks no-op to avoid duplicated
-    # wandb runs / TB writes.
-    is_rank_0 = int(os.environ.get("RANK", "0")) == 0
-    metrics_logger = build_logger(
-        jsonl_path=args.log_jsonl if is_rank_0 else None,
-        wandb_project=getattr(args, "wandb_project", None) if is_rank_0 else None,
-        wandb_run_name=getattr(args, "wandb_run_name", None),
-        wandb_config={
-            "cfg": args.cfg,
-            "steps": args.steps,
-            "weight_sync_every": cfg.weight_sync_every,
-        },
-        tb_dir=getattr(args, "tb_dir", None) if is_rank_0 else None,
-    )
-
-    actor = TrainActor(
-        cfg,
-        producer_alias=args.producer_alias,
-        consumer_alias=args.consumer_alias,
-        master_port=args.master_port,
-    )
-
-    try:
-        for s in range(args.steps):
-            stats = actor.train_step()
-            logger.info(
-                "step=%d loss=%.4f kl=%.4f kl_to_old=%.4f ratios=%.3f "
-                "trunc_a=%.3f trunc_b=%.3f H=%.3f old_lp=%s "
-                "logprob_to_old=%.3g/%.3g "
-                "gnorm=%.3f reward=%.3f "
-                "tokens=%d resp_len=%.0f elapsed=%.2fs",
-                stats.step,
-                stats.loss,
-                stats.kl_mean,
-                stats.kl_to_old,
-                stats.ratios_mean,
-                stats.truncated_above_rate,
-                stats.truncated_below_rate,
-                stats.entropy_mean,
-                stats.old_logprobs_present,
-                stats.logprob_to_old_mean,
-                stats.logprob_to_old_max,
-                stats.grad_norm,
-                stats.mean_reward,
-                stats.response_tokens,
-                stats.response_length_mean,
-                stats.elapsed_s,
-            )
-            metrics_logger.log_step(stats.step, asdict(stats))
-
-            if cfg.weight_sync_every and (stats.step + 1) % cfg.weight_sync_every == 0:
-                logger.info("triggering weight sync v=%d", stats.step + 1)
-                t0 = time.time()
-                sync_result = actor.gather_and_publish(version=stats.step + 1)
-                if sync_result is not None:
-                    logger.info(
-                        "weight sync v=%d done in %.2fs: n=%d pull=%.2fs apply=%.2fs",
-                        sync_result["version"],
-                        time.time() - t0,
-                        sync_result["n_tensors"],
-                        sync_result["pull_s"],
-                        sync_result["apply_s"],
-                    )
-                    metrics_logger.log_event(
-                        "weight_sync",
-                        {
-                            "version": sync_result["version"],
-                            "n_tensors": sync_result["n_tensors"],
-                            "pull_s": sync_result["pull_s"],
-                            "apply_s": sync_result["apply_s"],
-                            "wall_s": sync_result.get("wall_s", time.time() - t0),
-                        },
-                    )
-                else:
-                    logger.info("weight sync v=%d (non-rank-0 path)", stats.step + 1)
-
-            save_due = (
-                args.save_dir
-                and args.save_every
-                and args.save_every > 0
-                and (stats.step + 1) % args.save_every == 0
-            )
-            if save_due:
-                save_path = _checkpoint_path(args.save_dir, stats.step + 1)
-                save_result = actor.save_hf_checkpoint(save_path, step=stats.step + 1)
-                if save_result is not None:
-                    logger.info("checkpoint saved: %s", save_result)
-
-            if not (stats.loss == stats.loss):  # NaN
-                logger.error("loss is NaN at step %d; aborting", stats.step)
-                return 3
-    except KeyboardInterrupt:
-        logger.info("interrupted; cleaning up")
-    finally:
-        if args.save_dir and args.save_final:
-            try:
-                save_path = _checkpoint_path(args.save_dir, getattr(actor, "_step", 0))
-                save_result = actor.save_hf_checkpoint(
-                    save_path, step=getattr(actor, "_step", 0)
-                )
-                if save_result is not None:
-                    logger.info("final checkpoint saved: %s", save_result)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("final checkpoint save failed: %s", exc)
-        metrics_logger.close()
-        actor.close()
-    return 0
-
-
-def _train_ray(args: argparse.Namespace) -> int:
     """Launch one TrainActor per GPU as Ray actors on the requested train node."""
     from nanorl.config import NanoRLCfg
     from nanorl.metrics import build_logger
@@ -518,17 +339,17 @@ def _train_ray(args: argparse.Namespace) -> int:
 
     world_size = int(args.nproc or cfg.train.world_size)
     if world_size < 1:
-        logger.error("train-ray requires --nproc or cfg.train.world_size >= 1")
+        logger.error("train requires --nproc or cfg.train.world_size >= 1")
         return 2
     if cfg.train.fsdp and world_size < 2:
-        logger.error("cfg.train.fsdp=true requires train-ray world_size >= 2")
+        logger.error("cfg.train.fsdp=true requires train world_size >= 2")
         return 2
 
     ray_address = args.ray_address or cfg.ray.address or cfg.infer.ray_address
     train_ip = args.train_ip
     if args.dry_run:
         logger.info(
-            "dry-run: train-ray cfg=%s world_size=%d train_ip=%s ray=%s",
+            "dry-run: train cfg=%s world_size=%d train_ip=%s ray=%s",
             cfg_path,
             world_size,
             train_ip,
@@ -555,7 +376,7 @@ def _train_ray(args: argparse.Namespace) -> int:
     nodes = get_available_nodes_with_master_first(master_address)
     target_node_id = nodes[0]["NodeID"]
     logger.info(
-        "train-ray master node resolved: ip=%s node_id=%s",
+        "train master node resolved: ip=%s node_id=%s",
         nodes[0].get("NodeManagerAddress"),
         target_node_id,
     )
@@ -1110,7 +931,8 @@ def main(argv: list[str] | None = None) -> int:
     r.set_defaults(func=_rollout_only)
 
     tr = sp.add_parser(
-        "train", help="full M3 loop: train + periodic weight sync to rollout"
+        "train",
+        help="Ray-managed train loop with periodic weight sync to rollout",
     )
     tr.add_argument("--cfg", required=True, help="YAML config path")
     tr.add_argument("--steps", type=int, default=10)
@@ -1123,6 +945,18 @@ def main(argv: list[str] | None = None) -> int:
     tr.add_argument("--producer-alias", default=None)
     tr.add_argument("--consumer-alias", default=None)
     tr.add_argument("--master-port", type=int, default=29500)
+    tr.add_argument("--train-ip", default="10.102.98.154")
+    tr.add_argument(
+        "--nproc",
+        type=int,
+        default=None,
+        help="number of Ray TrainActor workers (default cfg.train.world_size)",
+    )
+    tr.add_argument(
+        "--ray-address",
+        default=None,
+        help="Ray address for the driver (default cfg.ray.address or cfg.infer.ray_address)",
+    )
     tr.add_argument("--log-jsonl", default=None)
     tr.add_argument(
         "--wandb-project",
@@ -1153,64 +987,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     tr.add_argument("--dry-run", action="store_true")
     tr.set_defaults(func=_train)
-
-    tray = sp.add_parser(
-        "train-ray",
-        help="run multi-rank TrainActor workers as Ray actors on one train node",
-    )
-    tray.add_argument("--cfg", required=True, help="YAML config path")
-    tray.add_argument("--steps", type=int, default=10)
-    tray.add_argument(
-        "--weight-sync-every",
-        type=int,
-        default=None,
-        help="override cfg.weight_sync_every (0 disables)",
-    )
-    tray.add_argument("--producer-alias", default=None)
-    tray.add_argument("--consumer-alias", default=None)
-    tray.add_argument("--master-port", type=int, default=29500)
-    tray.add_argument("--train-ip", default="10.102.98.154")
-    tray.add_argument(
-        "--nproc",
-        type=int,
-        default=None,
-        help="number of Ray TrainActor workers (default cfg.train.world_size)",
-    )
-    tray.add_argument(
-        "--ray-address",
-        default=None,
-        help="Ray address for the driver (default cfg.ray.address or cfg.infer.ray_address)",
-    )
-    tray.add_argument("--log-jsonl", default=None)
-    tray.add_argument(
-        "--wandb-project",
-        default=None,
-        help="enable wandb logger (requires `pip install wandb`)",
-    )
-    tray.add_argument("--wandb-run-name", default=None)
-    tray.add_argument(
-        "--tb-dir",
-        default=None,
-        help="enable TensorBoard logger (requires `pip install tensorboard`)",
-    )
-    tray.add_argument(
-        "--save-dir",
-        default=None,
-        help="directory for HF-format checkpoints; writes step_XXXXXX subdirs",
-    )
-    tray.add_argument(
-        "--save-every",
-        type=int,
-        default=0,
-        help="save a HF-format checkpoint every N steps (0 disables)",
-    )
-    tray.add_argument(
-        "--save-final",
-        action="store_true",
-        help="save a final HF-format checkpoint during shutdown",
-    )
-    tray.add_argument("--dry-run", action="store_true")
-    tray.set_defaults(func=_train_ray)
 
     cr = sp.add_parser(
         "consume-ray",
@@ -1248,26 +1024,6 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--output", default=None, help="optional JSON path for full report")
     e.add_argument("--dry-run", action="store_true")
     e.set_defaults(func=_eval)
-
-    t = sp.add_parser(
-        "train-only", help="run TrainActor pulling trajectories over SlimeRPC"
-    )
-    t.add_argument("--cfg", required=True, help="YAML config path")
-    t.add_argument("--steps", type=int, default=10)
-    t.add_argument("--producer-alias", default=None)
-    t.add_argument("--consumer-alias", default=None)
-    t.add_argument("--master-port", type=int, default=29500)
-    t.add_argument(
-        "--log-jsonl",
-        default=None,
-        help="append per-step TrainStats as JSONL to this path",
-    )
-    t.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="load and validate config, then exit without building the model",
-    )
-    t.set_defaults(func=_train_only)
 
     args = p.parse_args(argv)
     return int(args.func(args) or 0)
