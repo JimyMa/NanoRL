@@ -143,21 +143,6 @@ python -m nanorl.cli train ... \
 文件，并记录 `nanorl_checkpoint.json`。Ray 模式下，路径位于 Ray TrainActor
 实际运行的训练节点本地。
 
-## 验证结果
-
-Qwen3-4B-Instruct，1 个训练 rank + 4 个 NanoDeploy workers 的权重同步耗时如下：
-
-| 项目                 | DDP train  | 2-rank FSDP train |
-| -------------------- | ---------- | ----------------- |
-| Train step           | 0.30 s     | 0.30 s            |
-| Weight gather        | 0 s        | 6 s               |
-| Rollout 侧 RDMA pull | 1.5 s      | 1.5 s             |
-| Apply                | 0.85 s     | 1.5 s             |
-| **每次同步总耗时**   | **约 5 s** | **约 9 s**        |
-
-每次同步约传输 8 GB 权重。相比之前通过 Ray RPC fan-out 的约 65 s，同步链路降到约
-13 分之一。
-
 ## 测试
 
 ```bash

@@ -145,21 +145,6 @@ python -m nanorl.cli train ... \
 
 Each save writes `step_XXXXXX/model.safetensors`, tokenizer/config files copied from the source HF directory, and `nanorl_checkpoint.json`. In Ray mode the path is local to the train node where the Ray TrainActor runs.
 
-## Operational numbers
-
-Qwen3-4B-Instruct, 1 train rank (DDP) + 4 NanoDeploy workers (TP=4 attn, ffn_tp=4):
-
-|                                           | DDP train                  | 2-rank FSDP train               |
-| ----------------------------------------- | -------------------------- | ------------------------------- |
-| Train step                                | 0.30 s                     | 0.30 s                          |
-| Weight gather (collective)                | 0 s (params already full)  | 6 s (uneven-DTensor all-gather) |
-| Weight RDMA pull (rollout side)           | 1.5 s (4 workers parallel) | 1.5 s                           |
-| Apply (in-place copy, no graph recapture) | 0.85 s                     | 1.5 s                           |
-| **Total per sync**                        | **~5 s**                   | **~9 s**                        |
-| Manifest size                             | 398 HF tensors             | 398 HF tensors                  |
-
-8 GB transferred per sync; previous Ray-RPC fan-out was ~65 s — direct worker-side RDMA cut it 13×.
-
 ## Tests
 
 ```bash
