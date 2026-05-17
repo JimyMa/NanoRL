@@ -1,5 +1,10 @@
 # NanoRL
 
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README_zh.md">中文</a>
+</p>
+
 Ray-orchestrated reinforcement learning for large language models. NanoRL
 connects [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core)
 training, [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) inference,
