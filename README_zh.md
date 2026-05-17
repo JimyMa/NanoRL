@@ -1,11 +1,13 @@
-# NanoRL
+<h1 align="center">NanoRL</h1>
+
+<h3 align="center">面向大模型的 Ray 编排 Off-Policy 强化学习框架</h3>
 
 <p align="center">
   <a href="README.md">English</a> |
   <a href="README_zh.md">中文</a>
 </p>
 
-NanoRL 是一个由 Ray 编排的大模型强化学习框架。它把
+NanoRL 是一个面向大模型的训推协同强化学习框架。它把
 [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core)
 训练、[**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) 推理，以及
 [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) 传输连接成一个

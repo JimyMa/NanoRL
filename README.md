@@ -1,16 +1,20 @@
-# NanoRL
+<h1 align="center">NanoRL</h1>
+
+<h3 align="center">Ray-Orchestrated Off-Policy RL for Large Language Models</h3>
 
 <p align="center">
   <a href="README.md">English</a> |
   <a href="README_zh.md">中文</a>
 </p>
 
-Ray-orchestrated reinforcement learning for large language models. NanoRL
-connects [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core)
-training, [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) inference,
-and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) transport into an
-off-policy GRPO loop with rollout-side logprobs, Ray-managed train actors,
-FSDP/ZeRO-3, RDMA weight sync, held-out eval, and HF checkpoint export.
+NanoRL is a training-inference co-designed RL framework for large language
+models. It connects
+[**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core)
+training, [**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy)
+inference, and [**DLSlime**](https://github.com/DeepLink-org/NanoDeploy)
+transport into an off-policy GRPO loop with rollout-side logprobs, Ray-managed
+train actors, FSDP/ZeRO-3, RDMA weight sync, held-out eval, and HF checkpoint
+export.
 
 ## What You Can Run
 
