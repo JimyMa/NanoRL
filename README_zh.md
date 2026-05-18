@@ -10,7 +10,7 @@
 NanoRL 是一个面向大模型的训推协同强化学习框架。它把
 [**megatron-core**](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core)
 训练、[**NanoDeploy**](https://github.com/DeepLink-org/NanoDeploy) 推理，以及
-[**DLSlime**](https://github.com/DeepLink-org/NanoDeploy) 传输连接成一个
+[**DLSlime**](https://github.com/DeepLink-org/DLSlime) 传输连接成一个
 off-policy GRPO 闭环，支持 rollout 侧 logprobs、Ray 管理的 TrainActor、
 FSDP/ZeRO-3、RDMA 权重同步、验证集评测，以及 HF 格式 checkpoint 导出。
 
