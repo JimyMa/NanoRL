@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Protocol
 
 
@@ -21,11 +22,12 @@ _BOXED = re.compile(r"\\boxed\{([^{}]*)\}")
 # Per-line "Answer: X" — the DAPO/MATH-style instruction tells the model to
 # put its final answer on its own line after this prefix. Multi-line aware.
 _ANSWER_LINE = re.compile(r"(?im)^\s*answer\s*[:\-]\s*(.+?)\s*$")
+_BARE_NUMERIC = re.compile(r"\s*-?\d+(?:/\d+|\.\d+)?\s*")
 # Trailing number fallback. ``re.DOTALL`` makes ``.`` match newlines so the
 # negative-lookahead ``(?!.*\d)`` actually anchors at document-end (without
 # DOTALL it picks the first end-of-LINE number, not the last in the whole
 # response, and we'd extract "5" from "5²" three lines before the real answer).
-_TRAILING_NUM = re.compile(r"-?\d+(?:\.\d+)?(?!.*\d)", re.DOTALL)
+_TRAILING_NUM = re.compile(r"-?\d+(?:/\d+|\.\d+)?(?!.*\d)", re.DOTALL)
 
 
 def _extract_answer(text: str) -> str | None:
@@ -38,15 +40,21 @@ def _extract_answer(text: str) -> str | None:
         cand = answer_lines[-1].strip().strip("$").strip(".").strip()
         if cand:
             return cand
+    if _BARE_NUMERIC.fullmatch(text):
+        return text.strip()
     m = _TRAILING_NUM.search(text)
     return m.group(0) if m else None
 
 
 def _normalize_number(s: str) -> float | None:
+    s = s.replace(",", "").strip()
     try:
-        return float(s.replace(",", "").strip())
+        return float(Fraction(s))
     except (ValueError, AttributeError):
-        return None
+        try:
+            return float(s)
+        except (ValueError, AttributeError):
+            return None
 
 
 @dataclass

@@ -24,8 +24,33 @@ FSDP/ZeRO-3、RDMA 权重同步、验证集评测，以及 HF 格式 checkpoint 
 
 第三条是当前最重要、也已经验证过的端到端路径。在仓库内置的
 `nanorl_weird_algebra_v1` 代数集合上，Qwen3-4B FSDP 训练在 500-step smoke
-run 中将 held-out sampled reward 从 `0.4023` 提升到 `0.5625`。数据集、命令和
-注意事项见 [docs/weird_algebra_validation.md](docs/weird_algebra_validation.md)。
+run 以及 standalone base/checkpoint rollout 对比中，将 held-out sampled reward
+从 `0.4766` 提升到 `0.6719`。数据集、命令和注意事项见
+[docs/weird_algebra_validation.md](docs/weird_algebra_validation.md)。
+
+### 训练前后行为对比
+
+除了看 reward，直接对比 held-out algebra split 上的 rollout 输出更直观。下面是
+一个 first-sample 的例子：base 模型知道“通分”的大致套路，但算术过程发生漂移；
+500-step checkpoint 则能保持等式对齐并得到正确答案。
+
+```text
+题目：
+The number x satisfies (x - 4)/3 + (6x - 1)/4 = 289/12. Find x.
+
+Base Qwen3-4B-Base：
+... (x - 4)*4 + (6x - 1)*3 = 289*3
+... 22x - 19 = 8667
+Answer: 40.3
+
+NanoRL step-500 checkpoint：
+(4x - 16 + 18x - 3)/12 = 289/12
+(22x - 19)/12 = 289/12
+22x - 19 = 289
+22x = 308
+x = 14
+Answer: 14
+```
 
 ## 快速开始
 

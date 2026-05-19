@@ -111,3 +111,11 @@ def test_math_verifier_boxed():
     assert v.score("the answer is \\boxed{41}", "42") == 0.0
     assert v.score("the answer is 42", "42") == 1.0
     assert v.score("no answer here", "42") == 0.0
+
+
+def test_math_verifier_fraction_answers():
+    v = MathVerifier()
+    assert v.score("Answer: -263/8", "-263/8") == 1.0
+    assert v.score("Answer: -32.875", "-263/8") == 1.0
+    assert v.score("Answer: 36/25", "1.44") == 1.0
+    assert v.score("Answer: 36/25", "8") == 0.0

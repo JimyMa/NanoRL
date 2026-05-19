@@ -71,17 +71,19 @@ bash scripts/m3_fsdp_smoke.sh
 
 ## Observed Result
 
-In the validated 500-step run, held-out eval improved from 103/256 sampled
-rollouts correct to 144/256 sampled rollouts correct:
+In the validated 500-step run, a standalone rollout comparison on the corrected
+held-out labels improved from 122/256 sampled rollouts correct to 172/256
+sampled rollouts correct:
 
-| Eval round | Samples | Mean reward | Correct |
-| ---------: | ------: | ----------: | ------: |
-|          0 |     256 |      0.4023 |     103 |
-|         25 |     256 |      0.4883 |     125 |
-|         50 |     256 |      0.4609 |     118 |
-|         75 |     256 |      0.5078 |     130 |
-|        100 |     256 |      0.5039 |     129 |
-|        125 |     256 |      0.5625 |     144 |
+| Model                | Prompts | Samples per prompt | Mean reward | Correct |
+| -------------------- | ------: | -----------------: | ----------: | ------: |
+| Qwen3-4B-Base        |      64 |                  4 |      0.4766 |     122 |
+| NanoRL step-500 ckpt |      64 |                  4 |      0.6719 |     172 |
+
+Earlier raw training logs were emitted before the `linear_nested` label fix and
+therefore under-counted correct solutions for that template. The bundled JSONL
+files now contain formula-consistent labels, guarded by
+`tests/test_weird_algebra_dataset.py`.
 
 Training logs also showed the off-policy path was active:
 

@@ -26,8 +26,34 @@ export.
 
 The third path is the main validated workflow. On the bundled
 `nanorl_weird_algebra_v1` split, Qwen3-4B FSDP training improved held-out sampled
-reward from `0.4023` to `0.5625` in a 500-step smoke run. See
+reward from `0.4766` to `0.6719` in a 500-step smoke run plus standalone
+base/checkpoint rollout comparison. See
 `docs/weird_algebra_validation.md` for the dataset, command, and caveats.
+
+### Qualitative Before / After
+
+A standalone rollout comparison on the held-out algebra split is often more
+useful than a scalar reward. In one first-sample case, the base model knew the
+"common denominator" shape but corrupted the arithmetic, while the 500-step
+checkpoint kept the equation aligned:
+
+```text
+Prompt:
+The number x satisfies (x - 4)/3 + (6x - 1)/4 = 289/12. Find x.
+
+Base Qwen3-4B-Base:
+... (x - 4)*4 + (6x - 1)*3 = 289*3
+... 22x - 19 = 8667
+Answer: 40.3
+
+NanoRL step-500 checkpoint:
+(4x - 16 + 18x - 3)/12 = 289/12
+(22x - 19)/12 = 289/12
+22x - 19 = 289
+22x = 308
+x = 14
+Answer: 14
+```
 
 ## Quick start
 
