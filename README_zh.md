@@ -23,9 +23,11 @@ FSDP/ZeRO-3、RDMA 权重同步、验证集评测，以及 HF 格式 checkpoint 
 | **RL 训练实践**    | 完整 off-policy GRPO：rollout logprobs 作为 `old_logprobs`，FSDP 训练、权重同步、验证集评测、checkpoint 保存 | `bash scripts/m3_fsdp_smoke.sh`                                  |
 
 第三条是当前最重要、也已经验证过的端到端路径。在仓库内置的
-`nanorl_weird_algebra_v1` 代数集合上，Qwen3-4B FSDP 训练在 500-step smoke
-run 以及 standalone base/checkpoint rollout 对比中，将 held-out sampled reward
-从 `0.4766` 提升到 `0.6719`。数据集、命令和注意事项见
+`nanorl_weird_algebra_v1` 代数集合上，一次 500-step Qwen3-4B FSDP 回归训练
+将 held-out sampled reward 从 `103/256 = 40.23%` 提升到
+`192/256 = 75.00%`。同一次 run 保存了最终 HF checkpoint，并确认推理侧权重
+加载走模型 loader 路径：`398 loaded`、`0 skipped`、`via_model_load_weights=1`。
+数据集、命令和注意事项见
 [docs/weird_algebra_validation.md](docs/weird_algebra_validation.md)。
 
 ### 训练前后行为对比

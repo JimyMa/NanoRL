@@ -25,9 +25,11 @@ export.
 | **RL training practice** | The complete off-policy GRPO loop: rollout logprobs as `old_logprobs`, FSDP train, weight sync, eval, and checkpoint save | `bash scripts/m3_fsdp_smoke.sh`                                  |
 
 The third path is the main validated workflow. On the bundled
-`nanorl_weird_algebra_v1` split, Qwen3-4B FSDP training improved held-out sampled
-reward from `0.4766` to `0.6719` in a 500-step smoke run plus standalone
-base/checkpoint rollout comparison. See
+`nanorl_weird_algebra_v1` split, a 500-step Qwen3-4B FSDP regression run
+improved held-out sampled reward from `103/256 = 40.23%` to
+`192/256 = 75.00%`. The same run saved a final HF checkpoint and confirmed
+rollout-side weight loading through the model loader path
+(`398 loaded`, `0 skipped`, `via_model_load_weights=1`). See
 `docs/weird_algebra_validation.md` for the dataset, command, and caveats.
 
 ### Qualitative Before / After
